@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useUid } from "../auth/context";
-import { useMealsOfDay, useSettings } from "../data/hooks";
+import { useMealsOfDay, useSettings, useWorkoutsOfDay } from "../data/hooks";
 import { useTargets } from "../data/useTargets";
 import { deleteMeal, type StoredMeal, photoUrl } from "../data/store";
 import MealCapture from "../components/MealCapture";
@@ -48,6 +48,12 @@ export default function Meals() {
   );
 
   const targets = useTargets();
+  const { data: workouts } = useWorkoutsOfDay(date);
+
+  // Exercise earns room to eat: burning 250kcal and eating 250kcal more
+  // lands on the same shortfall. Leaving it out of the budget on the very
+  // screen where food is added made the day look tighter than it was.
+  const burned = workouts.reduce((sum, w) => sum + w.kcalBurned, 0);
 
   const closeCapture = () => {
     setCapturing(false);
@@ -73,6 +79,7 @@ export default function Meals() {
             <IntakeBar
               intake={total}
               target={targets.targetIntakeKcal}
+              burned={burned}
               tdee={targets.tdeeKcal}
             />
           )}
@@ -209,16 +216,19 @@ function MealCard({
 function IntakeBar({
   intake,
   target,
+  burned,
   tdee,
 }: {
   intake: number;
   target: number;
+  burned: number;
   tdee: number;
 }) {
-  const scale = Math.max(tdee * 1.15, intake, target);
+  const budget = target + burned;
+  const scale = Math.max(tdee * 1.15, intake, budget);
   const pct = (value: number) => (value / scale) * 100;
-  const over = intake > target;
-  const past = intake > tdee;
+  const over = intake > budget;
+  const past = intake > tdee + burned;
 
   return (
     <div>
@@ -229,25 +239,35 @@ function IntakeBar({
           }`}
           style={{ width: `${Math.min(100, pct(intake))}%` }}
         />
-        {/* the budget */}
+        {/* the budget, exercise included */}
         <div
           className="absolute top-0 h-full w-0.5 bg-ink"
-          style={{ left: `${pct(target)}%` }}
+          style={{ left: `${pct(budget)}%` }}
         />
         {/* maintenance */}
         <div
           className="absolute top-0 h-full w-px bg-rule-strong"
-          style={{ left: `${pct(tdee)}%` }}
+          style={{ left: `${pct(tdee + burned)}%` }}
         />
       </div>
-      <p className="mt-1.5 text-xs text-muted">
-        目標 {formatKcal(target)} kcal に対して{" "}
+      <p className="mt-1.5 text-xs leading-relaxed text-muted">
+        目標 {formatKcal(target)}
+        {burned > 0 && (
+          <>
+            {" "}
+            <span className="text-goal">+ 運動 {formatKcal(burned)}</span> ={" "}
+            {formatKcal(budget)}
+          </>
+        )}{" "}
+        kcal に対して{" "}
         {over ? (
-          <span className="text-warn">{formatKcal(intake - target)} kcal 超過</span>
+          <span className="text-warn">{formatKcal(intake - budget)} kcal 超過</span>
         ) : (
-          <span className="text-goal">あと {formatKcal(target - intake)} kcal</span>
+          <span className="text-goal">あと {formatKcal(budget - intake)} kcal</span>
         )}
-        <span className="text-muted">（消費 {formatKcal(tdee)} kcal）</span>
+        <span className="text-muted">
+          （基礎+活動 {formatKcal(tdee)} kcal）
+        </span>
       </p>
     </div>
   );

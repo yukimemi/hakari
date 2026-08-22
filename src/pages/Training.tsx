@@ -18,6 +18,7 @@ import {
 import { formatKcal } from "../lib/format";
 import { api, ApiError } from "../lib/api";
 import Scanning from "../components/Scanning";
+import WorkoutLog from "../components/WorkoutLog";
 import { ageFrom, bmi, exerciseKcal, todayKey } from "../../shared/calc";
 import { EXERCISE_BY_ID } from "../../shared/exercises";
 import type { PlanExercise } from "../../shared/schema";
@@ -95,6 +96,8 @@ export default function Training() {
 
   return (
     <>
+      <WorkoutLog date={todayKey()} weightKg={currentKg} />
+
       <Panel
         title={plan ? "今週のメニュー" : "メニュー"}
         action={

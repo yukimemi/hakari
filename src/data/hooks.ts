@@ -74,6 +74,33 @@ export function useWeights(): Async<WeightEntry[]> {
   return state;
 }
 
+/** The day's workouts. Same shape as useMealsOfDay — a day has two
+ *  ledgers, and the screens that show one usually need the other. */
+export function useWorkoutsOfDay(date: string): Async<StoredWorkout[]> {
+  const uid = useUid();
+  const [state, setState] = useState<
+    Async<StoredWorkout[]> & { loadedFor: string | null }
+  >({ data: [], loading: true, error: null, loadedFor: null });
+
+  useEffect(() => {
+    return watchWorkoutsInRange(
+      uid,
+      date,
+      date,
+      (data) => setState({ data, loading: false, error: null, loadedFor: date }),
+      (error) =>
+        setState((s) => ({ ...s, loading: false, error, loadedFor: date })),
+    );
+  }, [uid, date]);
+
+  const settled = state.loadedFor === date;
+  return {
+    data: settled ? state.data : [],
+    loading: !settled,
+    error: settled ? state.error : null,
+  };
+}
+
 export function useMealsOfDay(date: string): Async<StoredMeal[]> {
   const uid = useUid();
   // `loadedFor` tracks which date the snapshot belongs to, so switching
