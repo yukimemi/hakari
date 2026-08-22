@@ -44,6 +44,12 @@ export type Targets = {
   /** The nearest target date that would not. Null when even maintenance
    *  sits at the floor, i.e. when no date alone fixes it. */
   safeDate: string | null;
+  /** Grams of protein worth aiming at. In a deficit the body will spend
+   *  muscle unless protein is kept high, which is the difference between
+   *  losing fat and merely losing weight. 1.6g per kg of *goal* weight is
+   *  the usual figure — goal rather than current, so someone carrying a
+   *  lot of fat is not asked to eat for a body they are trying to leave. */
+  proteinTargetG: number;
 };
 
 export function useTargets(): Targets | null {
@@ -87,6 +93,7 @@ export function useTargets(): Targets | null {
       targetIntakeKcal,
       minimumIntakeKcal,
       belowMinimum: targetIntakeKcal < minimumIntakeKcal,
+      proteinTargetG: Math.round(goal.targetWeightKg * 1.6),
       safeDate: safeTargetDate({
         remainingKg: currentKg - goal.targetWeightKg,
         tdee: tdeeKcal,

@@ -164,20 +164,38 @@ export function useRecentLogs(days = 14) {
     };
   }, [uid, range.from, range.to]);
 
-  /** kcal in and kcal burned, keyed by date. */
+  /** kcal in, kcal burned and the macros behind them, keyed by date.
+   *
+   *  The macros are here because advice about a day is often about its
+   *  composition rather than its total: 900 kcal with 21g of protein and
+   *  900 kcal with 90g are the same number and not the same day. */
   const byDate = useMemo(() => {
-    const map = new Map<string, { intakeKcal: number; burnedKcal: number }>();
-    const bump = (
-      date: string,
-      field: "intakeKcal" | "burnedKcal",
-      value: number,
-    ) => {
-      const row = map.get(date) ?? { intakeKcal: 0, burnedKcal: 0 };
-      row[field] += value;
-      map.set(date, row);
+    const blank = () => ({
+      intakeKcal: 0,
+      burnedKcal: 0,
+      proteinG: 0,
+      fatG: 0,
+      carbsG: 0,
+    });
+    const map = new Map<string, ReturnType<typeof blank>>();
+    const row = (date: string) => {
+      const existing = map.get(date) ?? blank();
+      map.set(date, existing);
+      return existing;
     };
-    for (const m of meals) bump(m.date, "intakeKcal", m.totalKcal);
-    for (const w of workouts) bump(w.date, "burnedKcal", w.kcalBurned);
+
+    for (const meal of meals) {
+      const day = row(meal.date);
+      day.intakeKcal += meal.totalKcal;
+      for (const item of meal.items) {
+        day.proteinG += item.proteinG;
+        day.fatG += item.fatG;
+        day.carbsG += item.carbsG;
+      }
+    }
+    for (const workout of workouts) {
+      row(workout.date).burnedKcal += workout.kcalBurned;
+    }
     return map;
   }, [meals, workouts]);
 

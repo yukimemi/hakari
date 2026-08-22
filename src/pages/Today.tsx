@@ -200,6 +200,7 @@ export default function Today() {
       <CoachPanel
         uid={uid}
         saved={user.coach}
+        proteinTargetG={targets?.proteinTargetG}
         assignment={settings.ai.coach}
         byDate={byDate}
         todaysSlots={meals
@@ -241,6 +242,7 @@ export default function Today() {
 function CoachPanel({
   uid,
   saved,
+  proteinTargetG,
   assignment,
   byDate,
   todaysSlots,
@@ -251,8 +253,18 @@ function CoachPanel({
 }: {
   uid: string;
   saved?: CoachComment & { date: string };
+  proteinTargetG?: number;
   assignment: { provider: import("../../shared/providers").ProviderId; model?: string };
-  byDate: Map<string, { intakeKcal: number; burnedKcal: number }>;
+  byDate: Map<
+    string,
+    {
+      intakeKcal: number;
+      burnedKcal: number;
+      proteinG: number;
+      fatG: number;
+      carbsG: number;
+    }
+  >;
   todaysSlots: string[];
   weights: { date: string; value: number }[];
   tdee: number;
@@ -277,6 +289,9 @@ function CoachPanel({
       .map(([date, totals]) => ({
         date,
         weightKg: weightByDate.get(date),
+        proteinG: totals.proteinG,
+        fatG: totals.fatG,
+        carbsG: totals.carbsG,
         intakeKcal: totals.intakeKcal,
         burnedKcal: totals.burnedKcal,
         tdee,
@@ -305,6 +320,7 @@ function CoachPanel({
         }).format(new Date()),
         loggedSlots: todaysSlots,
         today: todayKey(),
+        proteinTargetG,
       });
       setFresh(res.comment);
       // Written for a specific day, so the day travels with it.

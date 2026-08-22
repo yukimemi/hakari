@@ -161,6 +161,9 @@ export const api = {
       intakeKcal: number;
       burnedKcal: number;
       tdee: number;
+      proteinG?: number;
+      fatG?: number;
+      carbsG?: number;
     }[];
     targetWeightKg: number;
     targetDate: string;
@@ -168,6 +171,7 @@ export const api = {
     localTime: string;
     loggedSlots: string[];
     today: string;
+    proteinTargetG?: number;
   }): Promise<{ comment: CoachComment; provider: ProviderId; model: string }> {
     const { assignment, ...rest } = args;
     return call("/api/coach", {

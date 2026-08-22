@@ -17,6 +17,9 @@ const DaySummary = z.object({
   intakeKcal: z.number(),
   burnedKcal: z.number(),
   tdee: z.number(),
+  proteinG: z.number().optional(),
+  fatG: z.number().optional(),
+  carbsG: z.number().optional(),
 });
 
 const Body = z.object({
@@ -36,6 +39,9 @@ const Body = z.object({
    *  than guessed. Told to work from finished days, the model otherwise
    *  labels today's own total 「昨日」. */
   today: z.string(),
+  /** Grams of protein worth aiming at, so the comment can judge the
+   *  composition of a day and not only its size. */
+  proteinTargetG: z.number().optional(),
 });
 
 const SYSTEM = `あなたはダイエット中の人に伴走するコーチです。直近の記録を見て、
@@ -61,7 +67,29 @@ const SYSTEM = `あなたはダイエット中の人に伴走するコーチで�
 - 今日について言えるのは「残りをどう使うか」だけ。例: 残り予算が
   何kcalあるか、夕食で何を選ぶと目標に収まるか。
 - 1日分の総括をしたいときは、今日ではなく昨日以前の記録を根拠にする。
-- 日付を取り違えないこと。「今日」と印のある行の数字を「昨日」と呼ばない。`;
+- 日付を取り違えないこと。「今日」と印のある行の数字を「昨日」と呼ばない。
+
+中身を見ること:
+- カロリーだけでなく PFC を見る。同じ 900kcal でも、たんぱく質 20g の日と
+  90g の日は別の日。
+- **減量中に最も重要なのはたんぱく質**。目標を大きく下回っていたら、それを
+  数字で指摘し、具体的な食材を挙げる (鶏むね・卵・ギリシャヨーグルト・
+  豆腐・魚・プロテインなど)。不足のまま減量を続けると、減るのは脂肪では
+  なく筋肉になる。
+- 脂質や炭水化物に偏っている日も、責めずに「次はここを替える」の形で言う。
+- 指摘は1点に絞る。全部言うと何も伝わらない。
+
+その1点は、上から順に当てはまる最初のものを選ぶ:
+1. 記録が途切れている → 再開を促す
+2. **たんぱく質が目標の6割未満** → 数字を挙げて食材を提案する。カロリーが
+   足りていても、ここが埋まっていない日は減量として失敗している
+3. 摂取が基礎代謝を下回っている → 食べるよう伝える
+4. 今日の残り予算の使い方
+5. 体重の傾向
+
+上位が当てはまるときに下位の話をしない。たとえばたんぱく質が大きく
+不足している日に「あと何kcal食べられます」だけを返すのは、いちばん
+重要なことを見落としている。`;
 
 export const POST = route(async (request) => {
   const user = await requireUser(request);
@@ -72,10 +100,32 @@ export const POST = route(async (request) => {
     .map((d) => {
       const deficit = Math.round(d.tdee - (d.intakeKcal - d.burnedKcal));
       const weight = d.weightKg ? `${d.weightKg.toFixed(1)}kg` : "未記録";
-      const line = `${d.date}: 体重 ${weight} / 摂取 ${Math.round(d.intakeKcal)}kcal / 消費(運動) ${Math.round(d.burnedKcal)}kcal / 収支 ${deficit >= 0 ? "-" : "+"}${Math.abs(deficit)}kcal`;
+      const macros =
+        d.proteinG === undefined
+          ? ""
+          : ` / P${Math.round(d.proteinG)}g F${Math.round(d.fatG ?? 0)}g C${Math.round(d.carbsG ?? 0)}g`;
+      const line = `${d.date}: 体重 ${weight} / 摂取 ${Math.round(d.intakeKcal)}kcal${macros} / 消費(運動) ${Math.round(d.burnedKcal)}kcal / 収支 ${deficit >= 0 ? "-" : "+"}${Math.abs(deficit)}kcal`;
       return d.date === body.today ? `${line}  ← 今日。まだ途中の途中経過` : line;
     })
     .join("\n");
+
+  const todayRow = body.recentDays.find((d) => d.date === body.today);
+  const proteinNote = (() => {
+    if (!body.proteinTargetG) return "";
+    const target = body.proteinTargetG;
+    if (todayRow?.proteinG === undefined) {
+      return `たんぱく質の目標: 1日 ${target}g`;
+    }
+    const got = Math.round(todayRow.proteinG);
+    const share = Math.round((got / target) * 100);
+    const verdict =
+      share < 60
+        ? " ← 大幅に不足。これを最優先で指摘すること"
+        : share < 85
+          ? " ← やや不足"
+          : " ← 足りている";
+    return `今日のたんぱく質: ${got}g / 目標 ${target}g (${share}%)${verdict}`;
+  })();
 
   const slots = body.loggedSlots.length
     ? body.loggedSlots.join("・")
@@ -85,6 +135,10 @@ export const POST = route(async (request) => {
     "直近の記録:",
     rows,
     "",
+    // The judgement is made here rather than left to the model. Asked to
+    // rank its own priorities it kept choosing the calorie angle, because
+    // "21g" only reads as a problem next to the number it should have been.
+    proteinNote,
     `今日の日付: ${body.today}`,
     `今の時刻: ${body.localTime} (今日はまだ途中)`,
     `今日の記録済みの食事: ${slots}`,
