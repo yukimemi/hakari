@@ -68,22 +68,7 @@ export default function Meals() {
       <DayNav date={date} onChange={setDate} />
 
       <Panel title="合計">
-        <div className="grid grid-cols-4 gap-2">
-          <Reading label="kcal" value={formatKcal(total)} size="md" />
-          <Reading
-            label="たんぱく質"
-            value={Math.round(macros.protein)}
-            unit="g"
-            size="sm"
-          />
-          <Reading label="脂質" value={Math.round(macros.fat)} unit="g" size="sm" />
-          <Reading
-            label="炭水化物"
-            value={Math.round(macros.carbs)}
-            unit="g"
-            size="sm"
-          />
-        </div>
+        <Reading label="kcal" value={formatKcal(total)} size="md" />
         <div className="mt-3">
           {targets && (
             <IntakeBar
@@ -92,6 +77,30 @@ export default function Meals() {
               burned={burned}
               tdee={targets.tdeeKcal}
             />
+          )}
+
+          {targets && (
+            <div className="mt-4 space-y-2.5 border-t border-rule/60 pt-3">
+              <MacroBar
+                label="たんぱく質"
+                got={macros.protein}
+                target={targets.proteinTargetG}
+                direction="floor"
+                hint="下回ると筋肉が落ちる"
+              />
+              <MacroBar
+                label="脂質"
+                got={macros.fat}
+                target={targets.fatTargetG}
+                direction="ceiling"
+              />
+              <MacroBar
+                label="炭水化物"
+                got={macros.carbs}
+                target={targets.carbsTargetG}
+                direction="ceiling"
+              />
+            </div>
           )}
         </div>
       </Panel>
@@ -326,6 +335,69 @@ function IntakeBar({
         )}{" "}
         維持 {formatKcal(maintenance)} kcal を超えると増えます。
       </p>
+    </div>
+  );
+}
+
+/**
+ * One macro against its target.
+ *
+ * The three are not read the same way, so they are not drawn the same way.
+ * Protein is a floor — falling short is the failure, and in a deficit it
+ * is the failure that costs muscle. Fat and carbohydrate are ceilings:
+ * they are what the remaining energy is spent on, and going over is what
+ * pushes the day past its budget. Colouring both "short = red" would have
+ * told the reader to eat more carbohydrate for the sake of a full bar.
+ */
+function MacroBar({
+  label,
+  got,
+  target,
+  direction,
+  hint,
+}: {
+  label: string;
+  got: number;
+  target: number;
+  direction: "floor" | "ceiling";
+  hint?: string;
+}) {
+  const grams = Math.round(got);
+  const share = target > 0 ? grams / target : 0;
+  const ok = direction === "floor" ? share >= 0.85 : share <= 1;
+  const bad = direction === "floor" ? share < 0.6 : share > 1.15;
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="text-muted">
+          {label}
+          {hint && !ok && (
+            <span className="ml-1.5 text-[10px] text-warn">{hint}</span>
+          )}
+        </span>
+        <span className="reading tabular-nums">
+          <span className={ok ? "text-ink" : bad ? "text-needle" : "text-warn"}>
+            {grams}
+          </span>
+          <span className="text-muted"> / {target} g</span>
+        </span>
+      </div>
+      <div className="relative mt-1 h-1.5 w-full overflow-hidden rounded-full bg-sunk">
+        <div
+          className={`h-full rounded-full transition-all duration-700 ${
+            ok ? "bg-goal" : bad ? "bg-needle" : "bg-warn"
+          }`}
+          style={{ width: `${Math.min(100, share * 100)}%` }}
+        />
+        {/* the target itself, when the bar has run past it */}
+        {share > 1 && (
+          <div
+            className="absolute inset-y-0 w-px bg-ink"
+            style={{ left: `${(1 / share) * 100}%` }}
+          />
+        )}
+      </div>
     </div>
   );
 }

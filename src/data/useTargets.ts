@@ -50,6 +50,14 @@ export type Targets = {
    *  the usual figure — goal rather than current, so someone carrying a
    *  lot of fat is not asked to eat for a body they are trying to leave. */
   proteinTargetG: number;
+  /** Fat at a quarter of the day's energy. Low enough to leave room for
+   *  the other two, high enough for hormones and for food to taste of
+   *  something — cutting fat to nothing is how diets get abandoned. */
+  fatTargetG: number;
+  /** Whatever energy is left once protein and fat are paid for. Carbs are
+   *  the flexible one: they fuel training and they are what gets squeezed
+   *  when the budget tightens. */
+  carbsTargetG: number;
 };
 
 export function useTargets(): Targets | null {
@@ -74,6 +82,16 @@ export function useTargets(): Targets | null {
     });
 
     const targetIntakeKcal = Math.round(tdeeKcal - requiredDailyDeficit);
+    const proteinTargetG = Math.round(goal.targetWeightKg * 1.6);
+    const fatTargetG = Math.round((targetIntakeKcal * 0.25) / 9);
+    // 4 kcal per gram of protein and carbohydrate, 9 for fat.
+    const carbsTargetG = Math.max(
+      0,
+      Math.round(
+        (targetIntakeKcal - proteinTargetG * 4 - fatTargetG * 9) / 4,
+      ),
+    );
+
     const minimumIntakeKcal = Math.round(
       minimumIntake(
         bmr({
@@ -93,7 +111,9 @@ export function useTargets(): Targets | null {
       targetIntakeKcal,
       minimumIntakeKcal,
       belowMinimum: targetIntakeKcal < minimumIntakeKcal,
-      proteinTargetG: Math.round(goal.targetWeightKg * 1.6),
+      proteinTargetG,
+      fatTargetG,
+      carbsTargetG,
       safeDate: safeTargetDate({
         remainingKg: currentKg - goal.targetWeightKg,
         tdee: tdeeKcal,
