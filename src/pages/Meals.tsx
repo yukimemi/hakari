@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useUid } from "../auth/context";
-import { useMealsOfDay, useSettings, useUserDoc } from "../data/hooks";
+import { useMealsOfDay, useSettings } from "../data/hooks";
+import { useTargets } from "../data/useTargets";
 import { deleteMeal, type StoredMeal, photoUrl } from "../data/store";
 import MealCapture from "../components/MealCapture";
 import DayNav from "../components/DayNav";
@@ -14,7 +15,7 @@ import {
   Reading,
 } from "../components/ui";
 import { formatKcal } from "../lib/format";
-import { tdeeForProfile, todayKey } from "../../shared/calc";
+import { todayKey } from "../../shared/calc";
 import type { MealSlot } from "../../shared/schema";
 
 const SLOT_LABEL: Record<MealSlot, string> = {
@@ -31,7 +32,6 @@ export default function Meals() {
   const [capturing, setCapturing] = useState(params.get("capture") === "1");
 
   const { settings } = useSettings();
-  const { data: user } = useUserDoc();
   const { data: meals, loading } = useMealsOfDay(date);
 
   const total = meals.reduce((sum, meal) => sum + meal.totalKcal, 0);
@@ -47,9 +47,7 @@ export default function Meals() {
     { protein: 0, fat: 0, carbs: 0 },
   );
 
-  const tdee = user.profile
-    ? tdeeForProfile(user.profile, user.goal?.startWeightKg ?? 70)
-    : 2000;
+  const targets = useTargets();
 
   const closeCapture = () => {
     setCapturing(false);
@@ -71,7 +69,13 @@ export default function Meals() {
           <Reading label="C" value={Math.round(macros.carbs)} unit="g" size="sm" />
         </div>
         <div className="mt-3">
-          <IntakeBar intake={total} tdee={tdee} />
+          {targets && (
+            <IntakeBar
+              intake={total}
+              target={targets.targetIntakeKcal}
+              tdee={targets.tdeeKcal}
+            />
+          )}
         </div>
       </Panel>
 
@@ -197,31 +201,53 @@ function MealCard({
 
 /** Intake against maintenance. The graduation at TDEE is the line that
  *  matters — under it the day moves toward the goal. */
-function IntakeBar({ intake, tdee }: { intake: number; tdee: number }) {
-  const scale = Math.max(tdee * 1.25, intake);
-  const intakePct = (intake / scale) * 100;
-  const tdeePct = (tdee / scale) * 100;
-  const over = intake > tdee;
+/** Two graduations, because there are two lines that matter and they are
+ *  not the same: the budget the goal date demands, and maintenance — above
+ *  which the day moves away from the goal rather than toward it. Measuring
+ *  against maintenance alone was the bug: it reported four times the
+ *  budget as "remaining". */
+function IntakeBar({
+  intake,
+  target,
+  tdee,
+}: {
+  intake: number;
+  target: number;
+  tdee: number;
+}) {
+  const scale = Math.max(tdee * 1.15, intake, target);
+  const pct = (value: number) => (value / scale) * 100;
+  const over = intake > target;
+  const past = intake > tdee;
 
   return (
     <div>
       <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-sunk">
         <div
-          className={`h-full rounded-full transition-all duration-700 ${over ? "bg-needle" : "bg-goal"}`}
-          style={{ width: `${Math.min(100, intakePct)}%` }}
+          className={`h-full rounded-full transition-all duration-700 ${
+            past ? "bg-needle" : over ? "bg-warn" : "bg-goal"
+          }`}
+          style={{ width: `${Math.min(100, pct(intake))}%` }}
         />
+        {/* the budget */}
         <div
-          className="absolute top-0 h-full w-px bg-ink"
-          style={{ left: `${tdeePct}%` }}
+          className="absolute top-0 h-full w-0.5 bg-ink"
+          style={{ left: `${pct(target)}%` }}
+        />
+        {/* maintenance */}
+        <div
+          className="absolute top-0 h-full w-px bg-rule-strong"
+          style={{ left: `${pct(tdee)}%` }}
         />
       </div>
       <p className="mt-1.5 text-xs text-muted">
-        消費 {formatKcal(tdee)} kcal に対して{" "}
+        目標 {formatKcal(target)} kcal に対して{" "}
         {over ? (
-          <span className="text-needle">{formatKcal(intake - tdee)} kcal 超過</span>
+          <span className="text-warn">{formatKcal(intake - target)} kcal 超過</span>
         ) : (
-          <span className="text-goal">あと {formatKcal(tdee - intake)} kcal</span>
+          <span className="text-goal">あと {formatKcal(target - intake)} kcal</span>
         )}
+        <span className="text-muted">（消費 {formatKcal(tdee)} kcal）</span>
       </p>
     </div>
   );

@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { useUid } from "../auth/context";
 import { useRecentLogs, useSettings, useUserDoc, useWeights } from "../data/hooks";
 import { saveUserSlice } from "../data/store";
+import { useTargets } from "../data/useTargets";
 import BeamScale from "../components/BeamScale";
 import {
   Alert,
@@ -52,10 +53,10 @@ export default function Today() {
   );
   const smoothed = useMemo(() => movingAverage(series, 7), [series]);
 
-  // The trend line is the honest reading of "where am I" — a single
-  // morning weigh-in swings a kilo on water alone.
-  const currentKg =
-    smoothed.at(-1)?.value ?? series.at(-1)?.value ?? goal.startWeightKg;
+  // Weight, maintenance and the daily budget all come from one place, so
+  // this screen and the meals tab cannot drift apart. They used to.
+  const targets = useTargets();
+  const currentKg = targets?.currentKg ?? goal.startWeightKg;
   const latestRaw = series.at(-1);
 
   const p = pace({
@@ -66,7 +67,7 @@ export default function Today() {
   });
   const projected = projectGoalDate(smoothed, goal.targetWeightKg);
 
-  const tdee = tdeeForProfile(profile, currentKg);
+  const tdee = targets?.tdeeKcal ?? tdeeForProfile(profile, currentKg);
   const totals = byDate.get(today) ?? { intakeKcal: 0, burnedKcal: 0 };
   const balance = dailyBalance({
     tdee,
