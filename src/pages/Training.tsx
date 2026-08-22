@@ -79,6 +79,8 @@ export default function Training() {
         shape={shape}
         avatarSrc={settings.avatarSrc}
         voiceEnabled={settings.voiceEnabled}
+        voiceName={settings.voiceName}
+        voicePitch={settings.voicePitch}
         weightKg={currentKg}
         onClose={() => setDemo(null)}
         onComplete={async (minutes, kcal) => {
@@ -177,6 +179,8 @@ function Demonstration({
   shape,
   avatarSrc,
   voiceEnabled,
+  voiceName,
+  voicePitch,
   weightKg,
   onClose,
   onComplete,
@@ -185,6 +189,8 @@ function Demonstration({
   shape: import("../../shared/schema").BodyShape;
   avatarSrc: string;
   voiceEnabled: boolean;
+  voiceName?: string;
+  voicePitch: number;
   weightKg: number;
   onClose: () => void;
   onComplete: (minutes: number, kcal: number) => Promise<void>;
@@ -205,9 +211,10 @@ function Demonstration({
     if (!voiceEnabled || !speechSupported()) return;
     const handle = speak(
       `${exercise.name}。${exercise.sets}セット、${exercise.reps}。${exercise.cue}`,
+      { voiceName, pitch: voicePitch },
     );
     return () => handle.cancel();
-  }, [exercise, voiceEnabled]);
+  }, [exercise, voiceEnabled, voiceName, voicePitch]);
 
   useEffect(() => cancelSpeech, []);
 

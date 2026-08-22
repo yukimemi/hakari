@@ -29,21 +29,58 @@ export type Keyframe = {
 };
 
 export type Motion = {
-  /** Whole-body orientation the exercise happens in. */
-  base: "standing" | "prone" | "supine";
+  /** Whole-body orientation the exercise happens in.
+   *
+   *  Poses are always authored standing — it is the only frame anyone can
+   *  reason about — and the figure is then tipped into place. "side" rolls
+   *  it onto one flank, which a plank held sideways needs and which
+   *  tipping forward or back cannot produce. */
+  base: "standing" | "prone" | "supine" | "side";
   /** One repetition in seconds. */
   loopSec: number;
+  /**
+   * Metres to lift the figure off the floor, for anything not standing.
+   *
+   * Tipping a standing figure lays it along the ground; what holds it up
+   * after that is whichever limb is bearing weight, and that differs by
+   * exercise. Straight arms hold a push-up roughly twice as high as folded
+   * forearms hold a plank. One shared constant put the arms through the
+   * floor for half of them.
+   */
+  floorHeight?: number;
   frames: Keyframe[];
 };
 
 const DEG = Math.PI / 180;
 
-/** Arms held out for a floor plank / push-up: shoulders under hands. */
-const PRONE_ARMS: BonePose = {
-  [B.LeftUpperArm]: [0, 0, 75 * DEG],
-  [B.RightUpperArm]: [0, 0, -75 * DEG],
+/**
+ * Arms holding the body off the floor.
+ *
+ * Authored standing, so "straight out in front" is what becomes "straight
+ * down at the floor" once the figure is tipped face-down. The previous
+ * version left the arms hanging at the sides, which after tipping put them
+ * along the ribs — the figure then read as lying flat rather than
+ * supporting itself, which is exactly how it looked.
+ */
+const SUPPORT_ARMS: BonePose = {
+  [B.LeftUpperArm]: [92 * DEG, 0, 76 * DEG],
+  [B.RightUpperArm]: [92 * DEG, 0, -76 * DEG],
   [B.LeftLowerArm]: [0, 0, 0],
   [B.RightLowerArm]: [0, 0, 0],
+};
+
+/** The same, folded to the elbows — a forearm plank. */
+const FOREARM_SUPPORT: BonePose = {
+  [B.LeftUpperArm]: [92 * DEG, 0, 76 * DEG],
+  [B.RightUpperArm]: [92 * DEG, 0, -76 * DEG],
+  [B.LeftLowerArm]: [0, -85 * DEG, 0],
+  [B.RightLowerArm]: [0, 85 * DEG, 0],
+};
+
+/** Feet pointed so the toes, not the shins, meet the floor. */
+const ON_TOES: BonePose = {
+  [B.LeftFoot]: [-42 * DEG, 0, 0],
+  [B.RightFoot]: [-42 * DEG, 0, 0],
 };
 
 const ARMS_DOWN: BonePose = {
@@ -214,53 +251,70 @@ export const MOTIONS: Record<string, Motion> = {
   pushup: {
     base: "prone",
     loopSec: 2.6,
-    frames: [
-      { t: 0, pose: { ...PRONE_ARMS }, hips: [0, 0, 0] },
-      {
-        t: 0.5,
-        pose: {
-          ...PRONE_ARMS,
-          [B.LeftLowerArm]: [0, -70 * DEG, 0],
-          [B.RightLowerArm]: [0, 70 * DEG, 0],
-        },
-        hips: [0, -0.16, 0],
-      },
-      { t: 1, pose: { ...PRONE_ARMS }, hips: [0, 0, 0] },
-    ],
-  },
-
-  "knee-pushup": {
-    base: "prone",
-    loopSec: 2.6,
+    floorHeight: 0.46,
     frames: [
       {
         t: 0,
-        pose: {
-          ...PRONE_ARMS,
-          [B.LeftLowerLeg]: [-80 * DEG, 0, 0],
-          [B.RightLowerLeg]: [-80 * DEG, 0, 0],
-        },
+        pose: { ...SUPPORT_ARMS, ...ON_TOES, [B.Spine]: [0, 0, 0] },
         hips: [0, 0, 0],
       },
       {
-        t: 0.5,
+        t: 0.45,
         pose: {
-          ...PRONE_ARMS,
-          [B.LeftLowerArm]: [0, -70 * DEG, 0],
-          [B.RightLowerArm]: [0, 70 * DEG, 0],
-          [B.LeftLowerLeg]: [-80 * DEG, 0, 0],
-          [B.RightLowerLeg]: [-80 * DEG, 0, 0],
+          ...ON_TOES,
+          // Elbows fold and travel back along the ribs; the chest, not the
+          // hips, is what comes down.
+          [B.LeftUpperArm]: [78 * DEG, 0, 62 * DEG],
+          [B.RightUpperArm]: [78 * DEG, 0, -62 * DEG],
+          [B.LeftLowerArm]: [0, -72 * DEG, 0],
+          [B.RightLowerArm]: [0, 72 * DEG, 0],
         },
         hips: [0, -0.14, 0],
       },
       {
         t: 1,
-        pose: {
-          ...PRONE_ARMS,
-          [B.LeftLowerLeg]: [-80 * DEG, 0, 0],
-          [B.RightLowerLeg]: [-80 * DEG, 0, 0],
-        },
+        pose: { ...SUPPORT_ARMS, ...ON_TOES },
         hips: [0, 0, 0],
+      },
+    ],
+  },
+
+  "knee-pushup": {
+    base: "prone",
+    loopSec: 2.8,
+    floorHeight: 0.42,
+    frames: [
+      {
+        t: 0,
+        pose: {
+          ...SUPPORT_ARMS,
+          // Knees down: the lower legs fold up behind, and the ankles go
+          // with them so the feet are not left standing on air.
+          [B.LeftLowerLeg]: [-88 * DEG, 0, 0],
+          [B.RightLowerLeg]: [-88 * DEG, 0, 0],
+        },
+        hips: [0, -0.02, 0],
+      },
+      {
+        t: 0.45,
+        pose: {
+          [B.LeftUpperArm]: [78 * DEG, 0, 62 * DEG],
+          [B.RightUpperArm]: [78 * DEG, 0, -62 * DEG],
+          [B.LeftLowerArm]: [0, -70 * DEG, 0],
+          [B.RightLowerArm]: [0, 70 * DEG, 0],
+          [B.LeftLowerLeg]: [-88 * DEG, 0, 0],
+          [B.RightLowerLeg]: [-88 * DEG, 0, 0],
+        },
+        hips: [0, -0.13, 0],
+      },
+      {
+        t: 1,
+        pose: {
+          ...SUPPORT_ARMS,
+          [B.LeftLowerLeg]: [-88 * DEG, 0, 0],
+          [B.RightLowerLeg]: [-88 * DEG, 0, 0],
+        },
+        hips: [0, -0.02, 0],
       },
     ],
   },
@@ -268,69 +322,96 @@ export const MOTIONS: Record<string, Motion> = {
   plank: {
     base: "prone",
     loopSec: 4,
+    floorHeight: 0.26,
+    frames: [
+      // A hold should look held: the only movement is breathing.
+      { t: 0, pose: { ...FOREARM_SUPPORT, ...ON_TOES }, hips: [0, -0.02, 0] },
+      {
+        t: 0.5,
+        pose: { ...FOREARM_SUPPORT, ...ON_TOES, [B.Chest]: [2.5 * DEG, 0, 0] },
+        hips: [0, -0.005, 0],
+      },
+      { t: 1, pose: { ...FOREARM_SUPPORT, ...ON_TOES }, hips: [0, -0.02, 0] },
+    ],
+  },
+
+  "side-plank": {
+    base: "side",
+    loopSec: 4,
+    floorHeight: 0.3,
     frames: [
       {
         t: 0,
         pose: {
-          [B.LeftUpperArm]: [0, 0, 78 * DEG],
-          [B.RightUpperArm]: [0, 0, -78 * DEG],
+          // One forearm down, the other arm reaching for the ceiling.
+          [B.LeftUpperArm]: [92 * DEG, 0, 74 * DEG],
           [B.LeftLowerArm]: [0, -80 * DEG, 0],
-          [B.RightLowerArm]: [0, 80 * DEG, 0],
+          [B.RightUpperArm]: [0, 0, -12 * DEG],
+          [B.LeftFoot]: [-30 * DEG, 0, 0],
+          [B.RightFoot]: [-30 * DEG, 0, 0],
         },
-        hips: [0, -0.06, 0],
+        hips: [0, -0.02, 0],
       },
-      // Held, with only breathing motion — a static hold should look held.
       {
         t: 0.5,
         pose: {
-          [B.LeftUpperArm]: [0, 0, 78 * DEG],
-          [B.RightUpperArm]: [0, 0, -78 * DEG],
+          [B.LeftUpperArm]: [92 * DEG, 0, 74 * DEG],
           [B.LeftLowerArm]: [0, -80 * DEG, 0],
-          [B.RightLowerArm]: [0, 80 * DEG, 0],
-          [B.Chest]: [2 * DEG, 0, 0],
+          [B.RightUpperArm]: [0, 0, -12 * DEG],
+          [B.Spine]: [0, 0, 3 * DEG],
+          [B.LeftFoot]: [-30 * DEG, 0, 0],
+          [B.RightFoot]: [-30 * DEG, 0, 0],
         },
-        hips: [0, -0.05, 0],
+        hips: [0, 0.01, 0],
       },
       {
         t: 1,
         pose: {
-          [B.LeftUpperArm]: [0, 0, 78 * DEG],
-          [B.RightUpperArm]: [0, 0, -78 * DEG],
+          [B.LeftUpperArm]: [92 * DEG, 0, 74 * DEG],
           [B.LeftLowerArm]: [0, -80 * DEG, 0],
-          [B.RightLowerArm]: [0, 80 * DEG, 0],
+          [B.RightUpperArm]: [0, 0, -12 * DEG],
+          [B.LeftFoot]: [-30 * DEG, 0, 0],
+          [B.RightFoot]: [-30 * DEG, 0, 0],
         },
-        hips: [0, -0.06, 0],
+        hips: [0, -0.02, 0],
       },
     ],
   },
 
   "mountain-climber": {
     base: "prone",
-    loopSec: 1.1,
+    loopSec: 1.4,
+    floorHeight: 0.46,
     frames: [
       {
         t: 0,
         pose: {
-          ...PRONE_ARMS,
-          [B.LeftUpperLeg]: [70 * DEG, 0, 0],
-          [B.LeftLowerLeg]: [-70 * DEG, 0, 0],
+          ...SUPPORT_ARMS,
+          ...ON_TOES,
+          [B.LeftUpperLeg]: [72 * DEG, 0, 0],
+          [B.LeftLowerLeg]: [-80 * DEG, 0, 0],
         },
+        hips: [0, 0, 0],
       },
       {
         t: 0.5,
         pose: {
-          ...PRONE_ARMS,
-          [B.RightUpperLeg]: [70 * DEG, 0, 0],
-          [B.RightLowerLeg]: [-70 * DEG, 0, 0],
+          ...SUPPORT_ARMS,
+          ...ON_TOES,
+          [B.RightUpperLeg]: [72 * DEG, 0, 0],
+          [B.RightLowerLeg]: [-80 * DEG, 0, 0],
         },
+        hips: [0, 0, 0],
       },
       {
         t: 1,
         pose: {
-          ...PRONE_ARMS,
-          [B.LeftUpperLeg]: [70 * DEG, 0, 0],
-          [B.LeftLowerLeg]: [-70 * DEG, 0, 0],
+          ...SUPPORT_ARMS,
+          ...ON_TOES,
+          [B.LeftUpperLeg]: [72 * DEG, 0, 0],
+          [B.LeftLowerLeg]: [-80 * DEG, 0, 0],
         },
+        hips: [0, 0, 0],
       },
     ],
   },
@@ -338,6 +419,7 @@ export const MOTIONS: Record<string, Motion> = {
   crunch: {
     base: "supine",
     loopSec: 2.4,
+    floorHeight: 0.16,
     frames: [
       {
         t: 0,
@@ -386,6 +468,7 @@ export const MOTIONS: Record<string, Motion> = {
   "glute-bridge": {
     base: "supine",
     loopSec: 2.6,
+    floorHeight: 0.16,
     frames: [
       {
         t: 0,
@@ -424,6 +507,7 @@ export const MOTIONS: Record<string, Motion> = {
   "dead-bug": {
     base: "supine",
     loopSec: 3.2,
+    floorHeight: 0.16,
     frames: [
       {
         t: 0,
@@ -464,6 +548,7 @@ export const MOTIONS: Record<string, Motion> = {
   "russian-twist": {
     base: "supine",
     loopSec: 2,
+    floorHeight: 0.22,
     frames: [
       {
         t: 0,
@@ -507,6 +592,7 @@ export const MOTIONS: Record<string, Motion> = {
   superman: {
     base: "prone",
     loopSec: 2.8,
+    floorHeight: 0.12,
     frames: [
       {
         t: 0,
@@ -535,31 +621,6 @@ export const MOTIONS: Record<string, Motion> = {
           [B.RightUpperArm]: [155 * DEG, 0, -80 * DEG],
         },
         hips: [0, -0.1, 0],
-      },
-    ],
-  },
-
-  "side-plank": {
-    base: "prone",
-    loopSec: 4,
-    frames: [
-      {
-        t: 0,
-        pose: {
-          [B.Spine]: [0, 0, 0],
-          [B.LeftUpperArm]: [0, 0, 80 * DEG],
-          [B.RightUpperArm]: [0, 0, -160 * DEG],
-        },
-        hips: [0, -0.05, 0],
-      },
-      {
-        t: 1,
-        pose: {
-          [B.Spine]: [0, 0, 0],
-          [B.LeftUpperArm]: [0, 0, 80 * DEG],
-          [B.RightUpperArm]: [0, 0, -160 * DEG],
-        },
-        hips: [0, -0.04, 0],
       },
     ],
   },

@@ -229,6 +229,11 @@ export const Settings = z.object({
    *  user uploaded themselves. */
   avatarSrc: z.string().default("/avatars/trainer.vrm"),
   voiceEnabled: z.boolean().default(true),
+  /** Exact name of the speech-synthesis voice to use. Device-specific, so
+   *  an unknown one simply falls back to the best available. */
+  voiceName: z.string().optional(),
+  /** 0.5 (low) .. 2 (high). */
+  voicePitch: z.number().min(0.5).max(2).default(1.35),
 });
 export type Settings = z.infer<typeof Settings>;
 
@@ -252,4 +257,5 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   avatarSrc: "/avatars/trainer.vrm",
   voiceEnabled: true,
+  voicePitch: 1.35,
 };

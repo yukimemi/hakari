@@ -220,3 +220,24 @@ describe("applyBodyShape on the mannequin", () => {
     rig.dispose();
   });
 });
+
+describe("motion coverage", () => {
+  it("has a motion for every exercise in the catalogue", () => {
+    // Without this, adding an exercise silently falls back to IDLE and the
+    // trainer stands there swaying while claiming to demonstrate a plank.
+    const missing = EXERCISES.filter((exercise) => !MOTIONS[exercise.id]);
+    expect(missing.map((exercise) => exercise.id)).toEqual([]);
+  });
+
+  it("keeps floor work off the floor", () => {
+    // A pose tipped onto the ground needs a support height, or the limbs
+    // holding it up end up below the grid.
+    for (const [id, motion] of Object.entries(MOTIONS)) {
+      if (motion.base === "standing") continue;
+      expect(
+        motion.floorHeight,
+        `${id} is on the floor but sets no floorHeight`,
+      ).toBeGreaterThan(0);
+    }
+  });
+});

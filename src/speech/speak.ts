@@ -14,18 +14,50 @@ export function speechSupported(): boolean {
   return typeof window !== "undefined" && "speechSynthesis" in window;
 }
 
-let cachedVoice: SpeechSynthesisVoice | null = null;
+/** Every Japanese voice the device has. Voices load asynchronously in
+ *  some browsers, so this can be empty on the first call and populated on
+ *  the next — callers should re-read it after `voiceschanged`. */
+export function japaneseVoices(): SpeechSynthesisVoice[] {
+  if (!speechSupported()) return [];
+  return window.speechSynthesis
+    .getVoices()
+    .filter((voice) => voice.lang.toLowerCase().startsWith("ja"));
+}
 
-/** Picks a Japanese voice once. Voices load asynchronously on some
- *  browsers, so this is re-checked on each call until one turns up. */
-function japaneseVoice(): SpeechSynthesisVoice | null {
-  if (cachedVoice) return cachedVoice;
-  const voices = window.speechSynthesis.getVoices();
-  cachedVoice =
-    voices.find((v) => v.lang === "ja-JP") ??
-    voices.find((v) => v.lang.startsWith("ja")) ??
-    null;
-  return cachedVoice;
+/** Names that ship as the female Japanese voice on the platforms this app
+ *  actually runs on. Taking the first ja-JP voice instead landed on
+ *  Microsoft Ichiro — a man — on Windows, which is not what anyone asked
+ *  a cute trainer to sound like. */
+const FEMALE_HINTS = [
+  "nanami",
+  "ayumi",
+  "haruka",
+  "sayaka",
+  "kyoko",
+  "o-ren",
+  "female",
+  "女性",
+];
+
+const MALE_HINTS = ["ichiro", "otoya", "keita", "hattori", "male", "男性"];
+
+export function preferredVoice(
+  wanted?: string,
+): SpeechSynthesisVoice | null {
+  const voices = japaneseVoices();
+  if (!voices.length) return null;
+
+  const chosen = wanted && voices.find((voice) => voice.name === wanted);
+  if (chosen) return chosen;
+
+  const score = (voice: SpeechSynthesisVoice) => {
+    const name = voice.name.toLowerCase();
+    if (MALE_HINTS.some((hint) => name.includes(hint))) return -1;
+    if (FEMALE_HINTS.some((hint) => name.includes(hint))) return 2;
+    return 1;
+  };
+
+  return [...voices].sort((a, b) => score(b) - score(a))[0] ?? null;
 }
 
 /**
@@ -41,6 +73,9 @@ export function speak(
   options: {
     rate?: number;
     pitch?: number;
+    /** Exact voice name, as chosen in settings. Falls back to the best
+     *  guess for this device when absent or no longer installed. */
+    voiceName?: string;
     onLevel?: (level: number) => void;
     onEnd?: () => void;
   } = {},
@@ -54,9 +89,11 @@ export function speak(
 
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "ja-JP";
-  utterance.rate = options.rate ?? 1;
-  utterance.pitch = options.pitch ?? 1.05;
-  const voice = japaneseVoice();
+  utterance.rate = options.rate ?? 0.98;
+  // Above 1 reads as younger and brighter. 1.35 is as far as the built-in
+  // voices go before they start to sound pinched rather than cheerful.
+  utterance.pitch = options.pitch ?? 1.35;
+  const voice = preferredVoice(options.voiceName);
   if (voice) utterance.voice = voice;
 
   let timer: number | undefined;

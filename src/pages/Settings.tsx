@@ -30,6 +30,13 @@ import {
 } from "../../shared/providers";
 import type { Equipment } from "../../shared/exercises";
 import type { Settings } from "../../shared/schema";
+import {
+  cancelSpeech,
+  japaneseVoices,
+  preferredVoice,
+  speak,
+  speechSupported,
+} from "../speech/speak";
 import { isOwner } from "../../shared/access";
 import InvitePanel from "./InvitePanel";
 
@@ -39,6 +46,105 @@ const EQUIPMENT_LABEL: Record<Equipment, string> = {
   dumbbell: "ダンベル",
   chair: "椅子",
 };
+
+/**
+ * Which voice, and how high.
+ *
+ * "Cute" is not something an app can decide for someone, and the voices
+ * available differ on every device — a Windows machine and a Pixel do not
+ * ship the same set. So the app picks the best guess (a female Japanese
+ * voice, never Ichiro) and then gets out of the way. The preview matters
+ * more than the list: nobody can tell what "Microsoft Nanami" sounds like
+ * by reading it.
+ */
+function VoicePicker({
+  name,
+  pitch,
+  onChange,
+}: {
+  name?: string;
+  pitch: number;
+  onChange: (changes: { voiceName?: string; voicePitch?: number }) => void;
+}) {
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+
+  useEffect(() => {
+    if (!speechSupported()) return;
+    const read = () => setVoices(japaneseVoices());
+    read();
+    // Chrome populates the list asynchronously, and fires this when it does.
+    window.speechSynthesis.addEventListener("voiceschanged", read);
+    return () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", read);
+      cancelSpeech();
+    };
+  }, []);
+
+  if (!speechSupported()) {
+    return (
+      <p className="text-xs text-muted">
+        この端末は音声合成に対応していません。
+      </p>
+    );
+  }
+
+  const current = preferredVoice(name);
+
+  return (
+    <div className="space-y-3 rounded-lg border border-rule/60 bg-sunk p-3">
+      <Field
+        label="声"
+        hint={
+          voices.length
+            ? undefined
+            : "端末が日本語の声を読み込み中です。少し待つか、再読み込みしてください。"
+        }
+      >
+        <Select
+          value={current?.name ?? ""}
+          onChange={(e) => onChange({ voiceName: e.target.value || undefined })}
+        >
+          <option value="">おまかせ</option>
+          {voices.map((voice) => (
+            <option key={voice.name} value={voice.name}>
+              {voice.name}
+            </option>
+          ))}
+        </Select>
+      </Field>
+
+      <div>
+        <div className="flex items-baseline justify-between">
+          <span className="engraved">高さ</span>
+          <span className="reading text-xs tabular-nums text-muted">
+            {pitch.toFixed(2)}
+          </span>
+        </div>
+        <input
+          type="range"
+          min="0.8"
+          max="1.8"
+          step="0.05"
+          value={pitch}
+          onChange={(e) => onChange({ voicePitch: Number(e.target.value) })}
+          className="mt-1 w-full accent-[color:var(--needle)]"
+        />
+      </div>
+
+      <Button
+        className="w-full"
+        onClick={() =>
+          speak("こんにちは。今日も一緒にがんばりましょう！", {
+            voiceName: current?.name,
+            pitch,
+          })
+        }
+      >
+        試しに聞く
+      </Button>
+    </div>
+  );
+}
 
 /** Order to fall back through, worst-to-best being the wrong way round:
  *  the hints in PROVIDER_META already say Claude reads portions most
@@ -331,6 +437,14 @@ export default function SettingsPage() {
               className="h-5 w-5 accent-[color:var(--needle)]"
             />
           </label>
+
+          {draft.voiceEnabled && (
+            <VoicePicker
+              name={draft.voiceName}
+              pitch={draft.voicePitch}
+              onChange={update}
+            />
+          )}
         </div>
       </Panel>
 

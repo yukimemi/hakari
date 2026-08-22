@@ -22,6 +22,8 @@ const Weight = lazy(() => import("./pages/Weight"));
 const Body = lazy(() => import("./pages/Body"));
 const Training = lazy(() => import("./pages/Training"));
 const SettingsPage = lazy(() => import("./pages/Settings"));
+// Temporary: authoring harness for the exercise motions.
+const MotionLab = lazy(() => import("./pages/MotionLab"));
 
 export default function App() {
   return (
@@ -97,6 +99,7 @@ function Gated() {
           <Route path="/body" element={<Body />} />
           <Route path="/training" element={<Training />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/dev/motions" element={<MotionLab />} />
           <Route path="/setup" element={<Setup existing={data} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

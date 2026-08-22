@@ -151,12 +151,19 @@ export default function AvatarStage({
 
     let rig: Rig | null = null;
 
+    // Every humanoid bone the rig has, collected once so the per-frame
+    // reset above is a walk over an array rather than 20 map lookups.
+    let restBones: THREE.Object3D[] = [];
+
     const install = (loaded: Rig) => {
       if (disposed) {
         loaded.dispose();
         return;
       }
       rig = loaded;
+      restBones = Object.values(VRMHumanBoneName)
+        .map((name) => loaded.getBone(name))
+        .filter((node): node is THREE.Object3D => node !== null);
       scene.add(loaded.root);
       setReady(true);
     };
@@ -195,6 +202,7 @@ export default function AvatarStage({
     const clock = new THREE.Clock();
     let elapsed = 0;
     const euler = new THREE.Euler();
+    const hipsWorld = new THREE.Vector3();
 
     renderer.setAnimationLoop(() => {
       const delta = clock.getDelta();
@@ -203,6 +211,13 @@ export default function AvatarStage({
       if (rig) {
         const motion = motionRef.current;
         const sample = sampleMotion(motion, elapsed / motion.loopSec);
+
+        // Back to the rest pose first. A keyframe only names the bones it
+        // moves, so without this every bone it leaves alone keeps whatever
+        // the previous exercise left there — a plank inherited the bent
+        // knees of the squat before it, which is a large part of why these
+        // looked absurd.
+        for (const node of restBones) node.quaternion.identity();
 
         for (const [boneName, angles] of sample.bones) {
           const node = rig.getBone(boneName);
@@ -225,12 +240,33 @@ export default function AvatarStage({
         // for a real model, the same half turn for the mannequin), and
         // writing all three axes here used to wipe it out every frame.
         const base = motion.base;
+        // X tips forward or back; Z rolls onto a flank. The Y rotation is
+        // left alone — it is what faces the figure at the camera.
         rig.root.rotation.x =
           base === "prone" ? Math.PI / 2 : base === "supine" ? -Math.PI / 2 : 0;
+        rig.root.rotation.z = base === "side" ? Math.PI / 2 : 0;
         if (base !== framedFor && !touched) frameFor(base);
-        rig.root.position.y =
-          base === "standing" ? sample.hips[1] : 0.24 + sample.hips[1];
-        rig.root.position.z = base === "standing" ? 0 : -0.45;
+        if (base === "standing") {
+          rig.root.position.set(0, sample.hips[1], 0);
+        } else {
+          // The rig's origin is between the feet, so tipping it swings the
+          // whole body away from that origin instead of turning it on the
+          // spot — the figure ended up off to one side of the frame, which
+          // a hand-tuned z offset was papering over. Put the hips where the
+          // origin was instead: that is the point a person actually rotates
+          // about, and it centres every floor pose without a magic number.
+          rig.root.position.set(0, 0, 0);
+          rig.root.updateMatrixWorld(true);
+          const hips = rig.getBone(VRMHumanBoneName.Hips);
+          if (hips) {
+            hipsWorld.setFromMatrixPosition(hips.matrixWorld);
+            rig.root.position.set(
+              -hipsWorld.x,
+              (motion.floorHeight ?? 0.24) + sample.hips[1] - hipsWorld.y,
+              -hipsWorld.z,
+            );
+          }
+        }
 
         applyBodyShape(rig, shapeRef.current);
         rig.update(delta);
@@ -294,8 +330,11 @@ function frameCamera(
     camera.position.set(0, 1.05, 3.1);
     controls.target.set(0, 0.95, 0);
   } else {
-    camera.position.set(2.3, 1.15, 2.0);
-    controls.target.set(0, 0.25, -0.3);
+    // Floor work is now centred on the origin (the hips sit there), so the
+    // camera looks at the origin too — the old target was compensating for
+    // a figure that used to be flung off to one side.
+    camera.position.set(1.7, 0.95, 1.7);
+    controls.target.set(0, 0.3, 0);
   }
   controls.update();
 }
