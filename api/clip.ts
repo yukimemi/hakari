@@ -29,7 +29,11 @@ const MODEL = process.env.VEO_MODEL ?? "veo-3.1-lite-generate-preview";
  *  sharing the generous one that text calls use. */
 const CLIP_LIMIT = Number(process.env.DAILY_CLIP_LIMIT) || 10;
 
-const Start = z.object({ exerciseId: z.string().min(1) });
+const Start = z.object({
+  exerciseId: z.string().min(1),
+  /** Who should be in it. Comes from settings so taste is the user's. */
+  subject: z.string().max(200).optional(),
+});
 
 function apiKey(): string {
   // Veo has no free tier, so it needs a key with billing enabled — which
@@ -59,7 +63,7 @@ async function ownerOnly(request: Request) {
 
 export const POST = route(async (request) => {
   const user = await ownerOnly(request);
-  const { exerciseId } = await readJson(request, Start);
+  const { exerciseId, subject } = await readJson(request, Start);
 
   const exercise = EXERCISE_BY_ID.get(exerciseId);
   if (!exercise) throw new BadRequest("知らない種目です");
@@ -70,9 +74,10 @@ export const POST = route(async (request) => {
     limit: CLIP_LIMIT,
   });
 
-  // The ids are the English names of the exercises, hyphenated.
-  const english = exerciseId.replace(/-/g, " ");
-  const prompt = `A person doing ${english} in a bright gym. Full body in frame.`;
+  // One short sentence: who, doing what, where. Veo's filter caught every
+  // longer prompt that tried to also direct the camera and the audio.
+  const who = subject?.trim() || "A person";
+  const prompt = `${who} doing ${exercise.english} in a bright gym. Full body in frame.`;
 
   const response = await fetch(`${BASE}/models/${MODEL}:predictLongRunning`, {
     method: "POST",

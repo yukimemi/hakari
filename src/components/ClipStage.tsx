@@ -21,11 +21,13 @@ export default function ClipStage({
   exerciseId,
   adopted,
   canGenerate,
+  subject,
   className = "",
 }: {
   exerciseId: string;
   adopted?: ClipRef;
   canGenerate: boolean;
+  subject?: string;
   className?: string;
 }) {
   const [take, setTake] = useState<Take | null>(null);
@@ -69,7 +71,7 @@ export default function ClipStage({
     setBusy(true);
     setError(null);
     try {
-      const { operation } = await api.startClip({ exerciseId });
+      const { operation } = await api.startClip({ exerciseId, subject });
       // Eleven seconds at best, six minutes at worst, so this polls rather
       // than holding a request open.
       for (let attempt = 0; attempt < 60 && !cancelled.current; attempt++) {

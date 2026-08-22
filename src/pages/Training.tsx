@@ -84,6 +84,7 @@ export default function Training() {
         voiceEnabled={settings.voiceEnabled}
         voiceName={settings.voiceName}
         voicePitch={settings.voicePitch}
+        clipSubject={settings.clipSubject}
         weightKg={currentKg}
         onClose={() => setDemo(null)}
         onComplete={async (minutes, kcal) => {
@@ -184,6 +185,7 @@ function Demonstration({
   voiceEnabled,
   voiceName,
   voicePitch,
+  clipSubject,
   weightKg,
   onClose,
   onComplete,
@@ -194,6 +196,7 @@ function Demonstration({
   voiceEnabled: boolean;
   voiceName?: string;
   voicePitch: number;
+  clipSubject: string;
   weightKg: number;
   onClose: () => void;
   onComplete: (minutes: number, kcal: number) => Promise<void>;
@@ -253,6 +256,7 @@ function Demonstration({
             exerciseId={exercise.id}
             adopted={clip}
             canGenerate={owner}
+            subject={clipSubject}
           />
         ) : (
           <div className="h-80 w-full overflow-hidden rounded-lg bg-sunk">

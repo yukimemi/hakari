@@ -161,6 +161,7 @@ export const api = {
   /** Starts a demonstration clip. Owner only, enforced on the server. */
   startClip(args: {
     exerciseId: string;
+    subject?: string;
   }): Promise<{ operation: string; exerciseId: string }> {
     return call("/api/clip", { method: "POST", body: args });
   },

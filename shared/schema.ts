@@ -234,6 +234,10 @@ export const Settings = z.object({
   voiceName: z.string().optional(),
   /** 0.5 (low) .. 2 (high). */
   voicePitch: z.number().min(0.5).max(2).default(1.35),
+  /** Who appears in a generated demonstration clip, in English, because
+   *  that is what Veo reads best. Kept short: long prompts get caught by
+   *  its filter. */
+  clipSubject: z.string().max(200).default("A Japanese woman in sportswear"),
 });
 export type Settings = z.infer<typeof Settings>;
 
@@ -258,4 +262,5 @@ export const DEFAULT_SETTINGS: Settings = {
   avatarSrc: "/avatars/trainer.vrm",
   voiceEnabled: true,
   voicePitch: 1.35,
+  clipSubject: "A Japanese woman in sportswear",
 };

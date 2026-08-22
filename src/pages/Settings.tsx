@@ -445,6 +445,23 @@ export default function SettingsPage() {
               onChange={update}
             />
           )}
+
+          {/* Only the owner generates clips, so only the owner is asked
+              who should be in them. In English because that is what the
+              video model reads; kept short because long prompts get
+              caught by its safety filter. */}
+          {isOwner(user?.email) && (
+            <Field
+              label="動画に映る人"
+              hint="AI 動画の被写体。英語で短く書くほど通りやすいです"
+            >
+              <TextInput
+                value={draft.clipSubject}
+                onChange={(e) => update({ clipSubject: e.target.value })}
+                placeholder="A Japanese woman in sportswear"
+              />
+            </Field>
+          )}
         </div>
       </Panel>
 
