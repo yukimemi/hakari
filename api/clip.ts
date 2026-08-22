@@ -32,8 +32,12 @@ const CLIP_LIMIT = Number(process.env.DAILY_CLIP_LIMIT) || 10;
 const Start = z.object({ exerciseId: z.string().min(1) });
 
 function apiKey(): string {
-  const key = process.env.GEMINI_API_KEY?.trim();
-  if (!key) throw new BadRequest("GEMINI_API_KEY が未設定です");
+  // Veo has no free tier, so it needs a key with billing enabled — which
+  // is not necessarily the key the text routes use. Kept separate rather
+  // than upgrading the everyday one, so a runaway text loop cannot start
+  // spending video money.
+  const key = (process.env.VEO_API_KEY ?? process.env.GEMINI_API_KEY)?.trim();
+  if (!key) throw new BadRequest("VEO_API_KEY が未設定です");
   return key;
 }
 
@@ -66,14 +70,9 @@ export const POST = route(async (request) => {
     limit: CLIP_LIMIT,
   });
 
-  const prompt = [
-    `A fitness instructor demonstrating ${exercise.name} (${exerciseId}).`,
-    exercise.cue,
-    "Full body visible head to toe, three-quarter view, plain light studio",
-    "background, even lighting, no text or captions, no camera cuts.",
-    "One slow controlled repetition, starting and ending in the same",
-    "position so the clip loops cleanly.",
-  ].join(" ");
+  // The ids are the English names of the exercises, hyphenated.
+  const english = exerciseId.replace(/-/g, " ");
+  const prompt = `A person doing ${english} in a bright gym. Full body in frame.`;
 
   const response = await fetch(`${BASE}/models/${MODEL}:predictLongRunning`, {
     method: "POST",
@@ -86,6 +85,9 @@ export const POST = route(async (request) => {
       parameters: {
         aspectRatio: "16:9",
         resolution: "720p",
+        // The only filter-related setting Veo exposes. Text-to-video is
+        // the one case where the permissive value is allowed.
+        personGeneration: "allow_all",
         // A number, despite the docs showing it quoted — the string is
         // rejected with INVALID_ARGUMENT, as is numberOfVideos, which the
         // docs list but this model does not accept.
@@ -135,6 +137,7 @@ export const GET = route(async (request) => {
     response?: {
       generateVideoResponse?: {
         generatedSamples?: { video?: { uri?: string } }[];
+        raiMediaFilteredReasons?: string[];
       };
     };
   };
@@ -142,9 +145,17 @@ export const GET = route(async (request) => {
   if (body.error) throw new BadRequest(body.error.message ?? "生成に失敗しました");
   if (!body.done) return json({ done: false });
 
+  const filtered =
+    body.response?.generateVideoResponse?.raiMediaFilteredReasons?.[0];
   const uri =
     body.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
-  if (!uri) throw new BadRequest("動画の URI が返りませんでした");
+
+  // Veo says outright that a filtered attempt is not charged, so this is a
+  // "press it again" rather than a failure worth apologising for. There is
+  // no setting to relax; the filter is one-way.
+  if (!uri) {
+    return json({ done: true, filtered: true, reason: filtered ?? null });
+  }
 
   // Google keeps the file for two days, so it has to be pulled across now
   // rather than linked to. Uploaded with the caller's own token, which is

@@ -169,7 +169,13 @@ export const api = {
   clipStatus(args: {
     operation: string;
     exerciseId: string;
-  }): Promise<{ done: boolean; path?: string }> {
+  }): Promise<{
+    done: boolean;
+    path?: string;
+    /** Veo refused this take. Not charged, so the answer is to try again. */
+    filtered?: boolean;
+    reason?: string | null;
+  }> {
     return call(
       `/api/clip?operation=${encodeURIComponent(args.operation)}&exerciseId=${encodeURIComponent(args.exerciseId)}`,
       { method: "GET" },

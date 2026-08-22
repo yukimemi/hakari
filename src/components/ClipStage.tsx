@@ -75,6 +75,12 @@ export default function ClipStage({
       for (let attempt = 0; attempt < 60 && !cancelled.current; attempt++) {
         await new Promise((resolve) => window.setTimeout(resolve, 6000));
         const status = await api.clipStatus({ operation, exerciseId });
+        if (status.filtered) {
+          setError(
+            "安全フィルタで弾かれました。課金はされていないので、もう一度押してください。",
+          );
+          return;
+        }
         if (status.done && status.path) {
           const url = await clipUrl(status.path);
           if (!cancelled.current) setTake({ path: status.path, url });

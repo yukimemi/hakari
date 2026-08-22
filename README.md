@@ -117,9 +117,12 @@ pnpm dev
 
 ## 実演の動画 (Veo)
 
-種目ごとに AI 生成の実演クリップを作れる。Gemini API の Veo 3.1 を使うので
-**追加のキーは要らない** — ただし **Veo に無料枠は無く**、`GEMINI_API_KEY` を
-従量課金に切り替えていないと 429 が返る。
+種目ごとに AI 生成の実演クリップを作れる。Gemini API の Veo 3.1 を使う。
+
+**Veo に無料枠は無い**ので、課金が有効なキーを `VEO_API_KEY` に入れる
+(未設定なら `GEMINI_API_KEY` にフォールバックするが、それが無料枠なら 429)。
+テキスト用と分けてあるのは、暴走したテキストのループが動画の金を使い始め
+ないようにするため。
 
 - 既定は `veo-3.1-lite-generate-preview` 720p 8 秒 = **$0.05/秒**
   (`VEO_MODEL` で変更可)。全 20 種目でおよそ $8。
@@ -133,8 +136,18 @@ pnpm dev
 - クリップの無い種目は 3D アバターにフォールバックする。画面上で
   「動画 / 3D」を切り替えられる。
 
-**API の細かい罠**: `durationSeconds` はドキュメントの例が文字列だが数値で
-渡す必要があり、`numberOfVideos` は例に載っているがこのモデルでは拒否される。
+**API の細かい罠**:
+- `durationSeconds` はドキュメントの例が文字列だが**数値**でないと通らない。
+- `numberOfVideos` と `generateAudio` は例に載っているが**このモデルは拒否**する。
+- **音声は常に生成され、切れない。** 安全フィルタの設定も無い
+  (`personGeneration` 以外に手はない)。長いプロンプト、特に "Audio:" の指定は
+  音声側のフィルタに毎回引っかかった。**短く素朴に書くこと** —
+  `A person doing side plank in a bright gym.` 程度で通る。
+- 弾かれた場合は `raiMediaFilteredReasons` が返り、**課金はされない**。
+  もう一度押せばよい。
+- **Storage に CORS 設定が要る。** 無いと `<video>` が readyState 0 のまま
+  止まる (画像は `<img>` なので影響を受けず、動画で初めて表面化した)。
+  `gcloud storage buckets update gs://<bucket> --cors-file=cors.json`。
 
 ## アクセス制御
 
