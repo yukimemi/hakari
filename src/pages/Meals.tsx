@@ -70,9 +70,19 @@ export default function Meals() {
       <Panel title="合計">
         <div className="grid grid-cols-4 gap-2">
           <Reading label="kcal" value={formatKcal(total)} size="md" />
-          <Reading label="P" value={Math.round(macros.protein)} unit="g" size="sm" />
-          <Reading label="F" value={Math.round(macros.fat)} unit="g" size="sm" />
-          <Reading label="C" value={Math.round(macros.carbs)} unit="g" size="sm" />
+          <Reading
+            label="たんぱく質"
+            value={Math.round(macros.protein)}
+            unit="g"
+            size="sm"
+          />
+          <Reading label="脂質" value={Math.round(macros.fat)} unit="g" size="sm" />
+          <Reading
+            label="炭水化物"
+            value={Math.round(macros.carbs)}
+            unit="g"
+            size="sm"
+          />
         </div>
         <div className="mt-3">
           {targets && (
@@ -192,8 +202,8 @@ function MealCard({
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{item.name}</p>
               <p className="truncate text-xs text-muted">
-                {item.quantity} · P{Math.round(item.proteinG)} F
-                {Math.round(item.fatG)} C{Math.round(item.carbsG)}
+                {item.quantity} · たんぱく質 {Math.round(item.proteinG)}g・脂質{" "}
+                {Math.round(item.fatG)}g・炭水化物 {Math.round(item.carbsG)}g
               </p>
             </div>
             <span className="reading shrink-0 text-sm">
@@ -208,11 +218,20 @@ function MealCard({
 
 /** Intake against maintenance. The graduation at TDEE is the line that
  *  matters — under it the day moves toward the goal. */
-/** Two graduations, because there are two lines that matter and they are
- *  not the same: the budget the goal date demands, and maintenance — above
- *  which the day moves away from the goal rather than toward it. Measuring
- *  against maintenance alone was the bug: it reported four times the
- *  budget as "remaining". */
+/** The day on a graduated rail.
+ *
+ * It was two unlabelled hairlines, which is to say the two numbers that
+ * decide the day were drawn as scratches and left to be guessed at. Now
+ * each mark carries its name, and the room exercise earned is a band you
+ * can see rather than a sum you have to trust.
+ *
+ *   |=========== eaten ===========|·· earned ··|···· neither ····|
+ *                              目標          維持
+ *
+ * Past 維持 the day gains weight; between the two it merely stops moving
+ * toward the goal. Those are different failures and they get different
+ * colours.
+ */
 function IntakeBar({
   intake,
   target,
@@ -225,50 +244,112 @@ function IntakeBar({
   tdee: number;
 }) {
   const budget = target + burned;
-  const scale = Math.max(tdee * 1.15, intake, budget);
-  const pct = (value: number) => (value / scale) * 100;
+  const maintenance = tdee + burned;
+  const scale = Math.max(maintenance * 1.12, intake * 1.02);
+  const pct = (value: number) => Math.min(100, (value / scale) * 100);
+
   const over = intake > budget;
-  const past = intake > tdee + burned;
+  const gaining = intake > maintenance;
+  const left = budget - intake;
 
   return (
     <div>
-      <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-sunk">
-        <div
-          className={`h-full rounded-full transition-all duration-700 ${
-            past ? "bg-needle" : over ? "bg-warn" : "bg-goal"
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="engraved">{gaining ? "維持を超過" : over ? "目標を超過" : "あと"}</span>
+        <span
+          className={`reading text-xl font-semibold ${
+            gaining ? "text-needle" : over ? "text-warn" : "text-goal"
           }`}
-          style={{ width: `${Math.min(100, pct(intake))}%` }}
-        />
-        {/* the budget, exercise included */}
+        >
+          {formatKcal(Math.abs(left))}
+          <span className="ml-1 text-xs font-medium text-muted">kcal</span>
+        </span>
+      </div>
+
+      <div className="relative mt-2 h-3 w-full overflow-hidden rounded-full bg-sunk">
+        {/* room earned by exercise */}
+        {burned > 0 && (
+          <div
+            className="absolute inset-y-0"
+            style={{
+              left: `${pct(target)}%`,
+              width: `${pct(budget) - pct(target)}%`,
+              // Tailwind cannot fold an alpha into a bare var() colour, so
+              // the tint is mixed here instead of written as bg-goal/25.
+              background: "color-mix(in srgb, var(--goal) 28%, transparent)",
+            }}
+          />
+        )}
+        {/* over budget, but not yet gaining */}
         <div
-          className="absolute top-0 h-full w-0.5 bg-ink"
+          className="absolute inset-y-0"
+          style={{
+            left: `${pct(budget)}%`,
+            width: `${pct(maintenance) - pct(budget)}%`,
+            background: "color-mix(in srgb, var(--warn) 16%, transparent)",
+          }}
+        />
+        <div
+          className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ${
+            gaining ? "bg-needle" : over ? "bg-warn" : "bg-goal"
+          }`}
+          style={{ width: `${pct(intake)}%` }}
+        />
+        <div
+          className="absolute inset-y-0 w-0.5 bg-ink"
           style={{ left: `${pct(budget)}%` }}
         />
-        {/* maintenance */}
         <div
-          className="absolute top-0 h-full w-px bg-rule-strong"
-          style={{ left: `${pct(tdee + burned)}%` }}
+          className="absolute inset-y-0 w-px bg-rule-strong"
+          style={{ left: `${pct(maintenance)}%` }}
         />
       </div>
-      <p className="mt-1.5 text-xs leading-relaxed text-muted">
-        目標 {formatKcal(target)}
-        {burned > 0 && (
+
+      {/* the marks, named */}
+      <div className="relative mt-1 h-8">
+        <Mark at={pct(budget)} label="目標" value={budget} strong />
+        <Mark at={pct(maintenance)} label="維持" value={maintenance} />
+      </div>
+
+      {/* The marks show the totals; this says where they came from, in the
+          same order and with the same words, so the two cannot be read as
+          different numbers. */}
+      <p className="mt-1 text-xs leading-relaxed text-muted">
+        {burned > 0 ? (
           <>
-            {" "}
-            <span className="text-goal">+ 運動 {formatKcal(burned)}</span> ={" "}
-            {formatKcal(budget)}
+            目標 {formatKcal(target)}{" "}
+            <span className="text-goal">＋ 運動 {formatKcal(burned)}</span> ={" "}
+            {formatKcal(budget)} kcal まで。
           </>
-        )}{" "}
-        kcal に対して{" "}
-        {over ? (
-          <span className="text-warn">{formatKcal(intake - budget)} kcal 超過</span>
         ) : (
-          <span className="text-goal">あと {formatKcal(budget - intake)} kcal</span>
-        )}
-        <span className="text-muted">
-          （基礎+活動 {formatKcal(tdee)} kcal）
-        </span>
+          <>目標 {formatKcal(budget)} kcal まで。</>
+        )}{" "}
+        維持 {formatKcal(maintenance)} kcal を超えると増えます。
       </p>
+    </div>
+  );
+}
+
+/** A named graduation under the rail. Nudged inward at the ends so the
+ *  label never hangs off the panel. */
+function Mark({
+  at,
+  label,
+  value,
+  strong = false,
+}: {
+  at: number;
+  label: string;
+  value: number;
+  strong?: boolean;
+}) {
+  return (
+    <div
+      className="absolute top-0 flex -translate-x-1/2 flex-col items-center"
+      style={{ left: `${Math.min(94, Math.max(6, at))}%` }}
+    >
+      <span className={`engraved ${strong ? "text-ink" : "text-muted"}`}>{label}</span>
+      <span className="reading text-[10px] text-muted">{formatKcal(value)}</span>
     </div>
   );
 }
