@@ -100,14 +100,24 @@ describe("pace", () => {
     expect(result.requiredWeeklyKg).toBeCloseTo(5 / 60 * 7, 6);
   });
 
-  it("flags a plan above 1% of bodyweight per week as aggressive", () => {
+  it("flags a plan above 0.75% of bodyweight per week as aggressive", () => {
     const gentle = pace({
       currentKg: 80,
       targetKg: 75,
       today: "2026-01-01",
-      targetDate: "2026-03-02",
+      targetDate: "2026-04-15",
     });
     expect(gentle.aggressive).toBe(false);
+
+    // 0.8%/week: under the old 1% line and silent, which is how a plan
+    // demanding an intake below basal metabolism went unremarked.
+    const brisk = pace({
+      currentKg: 80,
+      targetKg: 74,
+      today: "2026-01-01",
+      targetDate: "2026-03-08",
+    });
+    expect(brisk.aggressive).toBe(true);
 
     const crash = pace({
       currentKg: 80,

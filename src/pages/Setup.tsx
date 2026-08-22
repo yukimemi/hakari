@@ -12,8 +12,13 @@ import {
   ACTIVITY_LABEL,
   ACTIVITY_LEVELS,
   KCAL_PER_KG,
+  ageFrom,
   bmi,
+  bmr,
   daysBetween,
+  minimumIntake,
+  safeTargetDate,
+  tdee,
   todayKey,
   toDateKey,
 } from "../../shared/calc";
@@ -67,14 +72,47 @@ export default function Setup({ existing }: { existing: UserDoc }) {
     // Clamping that to a single day produced a six-figure number, so say
     // what is wrong instead of computing through it.
     const daysLeft = targetDate ? daysBetween(todayKey(), targetDate) : 0;
+    const dailyDeficit =
+      t && t < w && daysLeft >= 1 ? ((w - t) * KCAL_PER_KG) / daysLeft : null;
+
+    // What the chosen date actually asks you to eat, against what the body
+    // burns at rest. A date is easy to type and its consequence is not
+    // obvious, so it is spelled out before it is saved rather than
+    // discovered later on the dashboard.
+    const maintenance = tdee({
+      weightKg: w,
+      heightCm: h,
+      age: ageFrom(Number(birthYear) || new Date().getFullYear() - 30),
+      sex,
+      activityLevel,
+    });
+    const floor = minimumIntake(
+      bmr({
+        weightKg: w,
+        heightCm: h,
+        age: ageFrom(Number(birthYear) || new Date().getFullYear() - 30),
+        sex,
+      }),
+      sex,
+    );
+    const intake = dailyDeficit === null ? null : maintenance - dailyDeficit;
+
     return {
       bmi: bmi(w, h),
       suggestedDate: toDateKey(suggested),
       pastDate: Boolean(targetDate) && daysLeft < 1,
-      dailyDeficit:
-        t && t < w && daysLeft >= 1 ? ((w - t) * KCAL_PER_KG) / daysLeft : null,
+      dailyDeficit,
+      intake,
+      floor: Math.round(floor),
+      belowMinimum: intake !== null && intake < floor,
+      safeDate: safeTargetDate({
+        remainingKg: w - t,
+        tdee: maintenance,
+        minimum: floor,
+        from: todayKey(),
+      }),
     };
-  }, [heightCm, currentKg, targetKg, targetDate]);
+  }, [heightCm, currentKg, targetKg, targetDate, birthYear, sex, activityLevel]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -220,6 +258,29 @@ export default function Setup({ existing }: { existing: UserDoc }) {
               </Field>
             </div>
           </div>
+
+          {numbers?.belowMinimum && !numbers.pastDate && (
+            <Alert tone="warn">
+              <p className="font-medium">この目標日はきついです</p>
+              <p className="mt-1 leading-relaxed">
+                1 日{" "}
+                <strong className="reading">
+                  {Math.round(numbers.intake ?? 0).toLocaleString("ja-JP")}
+                </strong>{" "}
+                kcal しか食べられません。基礎代謝{" "}
+                <strong className="reading">
+                  {numbers.floor.toLocaleString("ja-JP")}
+                </strong>{" "}
+                kcal を下回るので、筋肉が落ちて代謝が下がります。
+              </p>
+              {numbers.safeDate && (
+                <p className="mt-2 leading-relaxed">
+                  <strong className="reading">{numbers.safeDate}</strong>{" "}
+                  以降にすると下回りません。
+                </p>
+              )}
+            </Alert>
+          )}
 
           {numbers?.pastDate && (
             <p className="mt-3 text-sm text-warn">

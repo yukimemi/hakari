@@ -13,7 +13,16 @@
 import { useMemo } from "react";
 import { useUserDoc } from "./userDocContext";
 import { useWeights } from "./hooks";
-import { movingAverage, pace, tdeeForProfile, todayKey } from "../../shared/calc";
+import {
+  ageFrom,
+  bmr,
+  minimumIntake,
+  movingAverage,
+  pace,
+  safeTargetDate,
+  tdeeForProfile,
+  todayKey,
+} from "../../shared/calc";
 
 export type Targets = {
   /** The trend weight, not this morning's reading — a single weigh-in
@@ -27,6 +36,14 @@ export type Targets = {
    *  the number a diet app means by "budget"; maintenance is the ceiling
    *  above which the day moves backwards. */
   targetIntakeKcal: number;
+  /** The floor: basal metabolism, or an absolute minimum, whichever is
+   *  higher. Eating under this is not a faster diet, it is muscle loss. */
+  minimumIntakeKcal: number;
+  /** True when the goal date demands eating below that floor. */
+  belowMinimum: boolean;
+  /** The nearest target date that would not. Null when even maintenance
+   *  sits at the floor, i.e. when no date alone fixes it. */
+  safeDate: string | null;
 };
 
 export function useTargets(): Targets | null {
@@ -50,11 +67,32 @@ export function useTargets(): Targets | null {
       targetDate: goal.targetDate,
     });
 
+    const targetIntakeKcal = Math.round(tdeeKcal - requiredDailyDeficit);
+    const minimumIntakeKcal = Math.round(
+      minimumIntake(
+        bmr({
+          weightKg: currentKg,
+          heightCm: profile.heightCm,
+          age: ageFrom(profile.birthYear),
+          sex: profile.sex,
+        }),
+        profile.sex,
+      ),
+    );
+
     return {
       currentKg,
       tdeeKcal,
       requiredDailyDeficit,
-      targetIntakeKcal: Math.round(tdeeKcal - requiredDailyDeficit),
+      targetIntakeKcal,
+      minimumIntakeKcal,
+      belowMinimum: targetIntakeKcal < minimumIntakeKcal,
+      safeDate: safeTargetDate({
+        remainingKg: currentKg - goal.targetWeightKg,
+        tdee: tdeeKcal,
+        minimum: minimumIntakeKcal,
+        from: todayKey(),
+      }),
     };
   }, [user, weights]);
 }

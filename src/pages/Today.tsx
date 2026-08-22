@@ -2,7 +2,7 @@
 // how did today go, and what should I do next.
 
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useUid } from "../auth/context";
 import { useRecentLogs, useSettings, useUserDoc, useWeights } from "../data/hooks";
 import { saveUserSlice } from "../data/store";
@@ -107,10 +107,41 @@ export default function Today() {
             size="sm"
           />
         </div>
-        {p.aggressive && !p.overdue && (
+        {targets?.belowMinimum && !p.overdue && (
+          <Alert tone="warn">
+            <p className="font-medium">目標日が近すぎます</p>
+            <p className="mt-1 leading-relaxed">
+              いまの目標日だと 1 日{" "}
+              <strong className="reading">
+                {formatKcal(targets.targetIntakeKcal)}
+              </strong>{" "}
+              kcal まで。基礎代謝{" "}
+              <strong className="reading">
+                {formatKcal(targets.minimumIntakeKcal)}
+              </strong>{" "}
+              kcal を下回ります。この状態が続くと筋肉が落ちて代謝が下がるので、
+              痩せても戻りやすくなります。
+            </p>
+            {targets.safeDate && (
+              <p className="mt-2 leading-relaxed">
+                目標日を <strong className="reading">{targets.safeDate}</strong>{" "}
+                まで延ばすと、下回らずに済みます。運動で消費を増やせば、その分
+                早まります。
+              </p>
+            )}
+            <Link
+              to="/setup"
+              className="mt-2 inline-block underline underline-offset-4"
+            >
+              目標日を変える
+            </Link>
+          </Alert>
+        )}
+
+        {p.aggressive && !targets?.belowMinimum && !p.overdue && (
           <p className="mt-3 text-xs leading-relaxed text-warn">
             週 {p.requiredWeeklyKg.toFixed(2)}kg
-            のペースです。体重の1%/週を超えると筋肉が落ちやすく、戻りやすくなります。目標日をずらす方が結果的に速いことが多いです。
+            のペースです。体重の0.75%/週を超えると筋肉が落ちやすく、戻りやすくなります。目標日をずらす方が結果的に速いことが多いです。
           </p>
         )}
       </Panel>

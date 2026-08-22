@@ -102,8 +102,14 @@ export type Pace = {
   requiredDailyDeficit: number;
   /** kg per week the plan implies. */
   requiredWeeklyKg: number;
-  /** True when the plan asks for more than 1% of bodyweight per week —
-   *  the point where muscle loss and rebound risk climb sharply. */
+  /** True when the plan asks for more than 0.75% of bodyweight per week.
+   *
+   *  It was 1%, which is the point where muscle loss and rebound risk
+   *  climb sharply — but a plan sitting just under the line is not a
+   *  comfortable plan, and one at 0.96% was passing silently while
+   *  demanding an intake 500 kcal below basal metabolism. The threshold
+   *  that matters most is `intakeFloor` below; this one is the earlier,
+   *  softer nudge. */
   aggressive: boolean;
   /** True when the target date has passed. */
   overdue: boolean;
@@ -126,7 +132,7 @@ export function pace(opts: {
     daysLeft,
     requiredDailyDeficit,
     requiredWeeklyKg,
-    aggressive: requiredWeeklyKg > opts.currentKg * 0.01,
+    aggressive: requiredWeeklyKg > opts.currentKg * 0.0075,
     overdue: daysLeft < 0,
   };
 }
@@ -233,6 +239,33 @@ export function todayKey(): string {
  * stretches costs lean mass and tanks adherence, so the UI warns instead
  * of silently recommending it.
  */
+/**
+ * The earliest target date that does not require eating below `minimum`.
+ *
+ * A goal date is a promise about arithmetic: the shortfall it demands is
+ * the distance divided by the days. Shorten the days enough and the
+ * shortfall exceeds what there is to cut, and the plan quietly becomes
+ * "eat less than your body burns at rest". This answers the only useful
+ * question at that point — how much later would be fine.
+ *
+ * Returns null when no date helps, i.e. when maintenance is already at or
+ * below the floor. Exercise is not counted: it raises the shortfall
+ * without cutting intake, so it moves the real date earlier than this.
+ */
+export function safeTargetDate(opts: {
+  remainingKg: number;
+  tdee: number;
+  minimum: number;
+  from: string;
+}): string | null {
+  const headroom = opts.tdee - opts.minimum;
+  if (!(opts.remainingKg > 0) || headroom <= 0) return null;
+  const days = Math.ceil((opts.remainingKg * KCAL_PER_KG) / headroom);
+  const date = new Date(`${opts.from}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return toDateKey(date);
+}
+
 export function minimumIntake(bmrValue: number, sex: Sex): number {
   const absoluteFloor = sex === "male" ? 1500 : 1200;
   return Math.max(absoluteFloor, bmrValue);
