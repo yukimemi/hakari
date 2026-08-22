@@ -1,6 +1,7 @@
 // Training screen: generate a week, then have the avatar demonstrate.
 
 import { useEffect, useMemo, useState } from "react";
+import { useSubView } from "../lib/subview";
 import { useAuth, useUid } from "../auth/context";
 import { useSettings, useUserDoc, useWeights } from "../data/hooks";
 import { saveUserSlice, saveWorkout } from "../data/store";
@@ -37,7 +38,17 @@ export default function Training() {
   const currentKg = weights.at(-1)?.weightKg ?? goal.startWeightKg;
   const plan = user.plan;
 
-  const [demo, setDemo] = useState<PlanExercise | null>(null);
+  // Addressed as `day.id` rather than by id alone: the same movement can
+  // appear on more than one day with different sets, and showing the
+  // wrong day's numbers is worse than a longer parameter.
+  const demoView = useSubView("do");
+  const demo = useMemo(() => {
+    if (!demoView.value || !plan) return null;
+    const [day, id] = splitOnce(demoView.value, ".");
+    return (
+      plan.days[Number(day)]?.exercises.find((e) => e.id === id) ?? null
+    );
+  }, [demoView.value, plan]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,7 +97,7 @@ export default function Training() {
         voicePitch={settings.voicePitch}
         clipSubject={settings.clipSubject}
         weightKg={currentKg}
-        onClose={() => setDemo(null)}
+        onClose={demoView.close}
         onComplete={async (minutes, kcal) => {
           await saveWorkout(uid, {
             date: todayKey(),
@@ -94,7 +105,7 @@ export default function Training() {
             minutes,
             kcalBurned: kcal,
           });
-          setDemo(null);
+          demoView.close();
         }}
       />
     );
@@ -151,7 +162,7 @@ export default function Training() {
             {day.exercises.map((exercise, i) => (
               <li key={i}>
                 <button
-                  onClick={() => setDemo(exercise)}
+                  onClick={() => demoView.open(`${index}.${exercise.id}`)}
                   className="flex w-full items-center justify-between gap-3 py-3 text-left hover:opacity-80"
                 >
                   <div className="min-w-0">
@@ -364,3 +375,11 @@ function Demonstration({
   );
 }
 
+/** `split` with a limit keeps the tail, which is what an id containing
+ *  the separator would need; the built-in one drops it. */
+function splitOnce(value: string, separator: string): [string, string] {
+  const at = value.indexOf(separator);
+  return at < 0
+    ? [value, ""]
+    : [value.slice(0, at), value.slice(at + separator.length)];
+}

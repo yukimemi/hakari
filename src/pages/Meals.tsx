@@ -1,7 +1,7 @@
 // Meal log for one day, plus the capture flow.
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSubView } from "../lib/subview";
 import { useUid } from "../auth/context";
 import { useMealsOfDay, useSettings, useWorkoutsOfDay } from "../data/hooks";
 import { useTargets } from "../data/useTargets";
@@ -34,9 +34,17 @@ const SLOT_LABEL: Record<MealSlot, string> = {
 
 export default function Meals() {
   const uid = useUid();
-  const [params, setParams] = useSearchParams();
   const [date, setDate] = useState(todayKey());
-  const [capturing, setCapturing] = useState(params.get("capture") === "1");
+  // In the URL, so back closes the capture form rather than leaving the
+  // page — and so the dashboard's shortcut is the same thing as pressing
+  // 「食事を追加」 here, not a second way in.
+  const capture = useSubView("capture");
+  const capturing = capture.value === "1";
+  // True only when the page was entered with the form already open — the
+  // dashboard shortcut, which means "I am about to eat" and should reach
+  // the camera in one tap. Pressing 「食事を追加」 here keeps the choice
+  // between camera, album and typing.
+  const [autoOpen] = useState(capturing);
 
   const { settings } = useSettings();
   const { data: meals, loading } = useMealsOfDay(date);
@@ -61,14 +69,6 @@ export default function Meals() {
   // lands on the same shortfall. Leaving it out of the budget on the very
   // screen where food is added made the day look tighter than it was.
   const burned = workouts.reduce((sum, w) => sum + w.kcalBurned, 0);
-
-  const closeCapture = () => {
-    setCapturing(false);
-    if (params.has("capture")) {
-      params.delete("capture");
-      setParams(params, { replace: true });
-    }
-  };
 
   return (
     <>
@@ -116,12 +116,12 @@ export default function Meals() {
         <MealCapture
           date={date}
           assignment={settings.ai.meal}
-          autoOpen={params.get("capture") === "1"}
-          onSaved={closeCapture}
-          onCancel={closeCapture}
+          autoOpen={autoOpen}
+          onSaved={capture.close}
+          onCancel={capture.close}
         />
       ) : (
-        <Button variant="primary" size="lg" onClick={() => setCapturing(true)}>
+        <Button variant="primary" size="lg" onClick={() => capture.open("1")}>
           食事を追加
         </Button>
       )}
