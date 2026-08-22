@@ -1,0 +1,26 @@
+# Editor defaults, matching what the repo already enforces elsewhere:
+# `.gitattributes` normalises to LF on commit and Prettier owns the
+# formatting. This file is for the tools that read neither — plain
+# editors, and scripts that rewrite a file wholesale.
+#
+# It exists because they got it wrong: a handful of files were written
+# back as CRLF, and the next edit through an LF-normalising tool turned
+# a two-line change into a 462-line diff.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Tab-indented by their own convention, not ours.
+[Makefile]
+indent_style = tab
+
+[*.md]
+# Two trailing spaces are a line break in Markdown.
+trim_trailing_whitespace = false
