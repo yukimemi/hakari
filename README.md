@@ -192,9 +192,17 @@ allow delete: if false;
 
 <https://hakari-two.vercel.app> (Vercel, 東京リージョン)。
 
+`main` に push すると本番へ、PR を開くとプレビュー URL が出る
+(Vercel の GitHub 連携)。手で出したいときは:
+
 ```sh
 pnpm dlx vercel@latest deploy --prod
 ```
+
+**Firebase Hosting には出していない**。`api/` が Vercel Functions
+なので、Hosting では AI 機能が動かない。プリセット由来の
+`.github/workflows/deploy.yml` はそのため消してある (`.kata/applied.toml`
+の `once_applied` が再生成を止めている)。
 
 環境変数は Vercel のプロジェクト設定に入っている (`vercel env ls`)。
 新しいドメインを足したら Firebase の承認済みドメインにも追加すること
