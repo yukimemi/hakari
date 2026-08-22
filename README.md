@@ -1,4 +1,7 @@
-# hakari — 秤
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+  <img src="assets/logo.svg" alt="hakari — 秤. measure, then move" width="380">
+</picture>
 
 写真を撮るだけで食事のカロリーが記録され、体型の変化が 3D で見え、
 その体型に合ったトレーニングを 3D のトレーナーが実演する、

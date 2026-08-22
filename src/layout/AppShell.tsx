@@ -23,6 +23,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     <div className="mx-auto flex min-h-full max-w-lg flex-col">
       <header className="sticky top-0 z-10 flex items-center justify-between border-b border-rule/60 bg-bg/85 px-4 py-3 backdrop-blur">
         <div className="flex items-baseline gap-2">
+          <BeamMark />
           <span className="reading text-lg font-bold tracking-tight">hakari</span>
           <span className="engraved">{current?.label ?? "設定"}</span>
         </div>
@@ -69,6 +70,39 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <div style={{ height: "env(safe-area-inset-bottom)" }} />
       </nav>
     </div>
+  );
+}
+
+/** The logo mark. Inline rather than an <img> so it takes the theme with
+ *  it: the beam is currentColor, and the reading is the same needle red
+ *  the rest of the app reserves for a measurement. */
+function BeamMark() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 32 32"
+      aria-hidden
+      className="shrink-0 self-center text-rule-strong"
+    >
+      <g strokeLinecap="round">
+        <line x1="5.5" y1="19" x2="26.5" y2="19" stroke="currentColor" strokeWidth="2.4" />
+        <g stroke="currentColor" strokeWidth="1.4" opacity="0.6">
+          <line x1="9" y1="22" x2="9" y2="25" />
+          <line x1="16" y1="22" x2="16" y2="25" />
+          <line x1="23" y1="22" x2="23" y2="25" />
+        </g>
+        <line
+          x1="12.5"
+          y1="15.5"
+          x2="12.5"
+          y2="22"
+          stroke="var(--needle)"
+          strokeWidth="2.2"
+        />
+      </g>
+      <path d="M12.5 16.4 L8.6 8.8 L16.4 8.8 Z" fill="var(--needle)" />
+    </svg>
   );
 }
 

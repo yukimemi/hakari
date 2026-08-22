@@ -1,6 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#0f172a"/>
-  <text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle"
-    font-family="ui-monospace, monospace" font-size="18" font-weight="700"
-    fill="#f8fafc">R</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="hakari">
+  <!-- The steelyard beam, which is the app's signature element too
+       (src/components/BeamScale.tsx).
+
+       Drawn for 16px first. At that size a 1px feature is a suggestion, so
+       there are only three: the beam, the needle standing on it, and three
+       graduations to say the beam is a scale rather than a rule. Anything
+       finer turned to mud when checked at actual size. -->
+  <rect width="32" height="32" rx="7" fill="#161a1f"/>
+
+  <g stroke-linecap="round">
+    <line x1="5.5" y1="19" x2="26.5" y2="19" stroke="#d7dce1" stroke-width="2.4"/>
+    <g stroke="#7d8894" stroke-width="1.4">
+      <line x1="9" y1="22" x2="9" y2="25"/>
+      <line x1="16" y1="22" x2="16" y2="25"/>
+      <line x1="23" y1="22" x2="23" y2="25"/>
+    </g>
+    <line x1="12.5" y1="15.5" x2="12.5" y2="22" stroke="#ff5a3c" stroke-width="2.2"/>
+  </g>
+  <path d="M12.5 16.4 L8.6 8.8 L16.4 8.8 Z" fill="#ff5a3c"/>
 </svg>
