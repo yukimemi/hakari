@@ -7,8 +7,8 @@ import { useMealsOfDay, useSettings, useWorkoutsOfDay } from "../data/hooks";
 import { useTargets } from "../data/useTargets";
 import { deleteMeal, saveMeal, type StoredMeal, photoUrl } from "../data/store";
 import MealItemsEditor from "../components/MealItemsEditor";
-import { type MealDraft } from "../lib/meal";
-import { api, ApiError } from "../lib/api";
+import { recalculate, type MealDraft } from "../lib/meal";
+import { ApiError } from "../lib/api";
 import Scanning from "../components/Scanning";
 import MealCapture from "../components/MealCapture";
 import DayNav from "../components/DayNav";
@@ -190,44 +190,17 @@ function MealCard({
     setDraft(meal.items.map((item) => ({ ...item })));
   };
 
-  // The photo cannot show how much milk went into the glass; the person
-  // who poured it can. Correct the amount, and the numbers behind it are
-  // worked out again from the corrected amount rather than left stale.
-  const recalculate = async () => {
-    if (!draft) return;
-    const items = draft.filter((item) => item.name.trim());
-    if (!items.length) return;
+  // The photo cannot show how much milk went into the glass, and it can
+  // read 納豆 as 煮豆; the person who ate it can correct either. Fix the
+  // name or the amount and the numbers behind it are worked out again
+  // rather than left stale.
+  const recompute = async () => {
+    if (!draft?.some((item) => item.name.trim())) return;
     setRecalculating(true);
     setError(null);
     try {
-      const res = await api.analyzeMeal({
-        assignment,
-        items: items.map((item) => ({
-          name: item.name,
-          quantity: item.quantity,
-        })),
-      });
-      // Matched by position, and the names and amounts stay as typed: the
-      // model was asked to recompute, not to rewrite. If it returns a
-      // different number of rows, the numbers it did return are still
-      // applied to the rows they line up with.
-      setDraft(
-        items.map((item, index) => {
-          const fresh = res.analysis.items[index];
-          // Rounded on arrival. A recomputed 1.65g of protein is not more
-          // accurate than 1.7g, it just looks like it is — and the raw
-          // value would sit in the input field saying so.
-          return fresh
-            ? {
-                ...item,
-                kcal: Math.round(fresh.kcal),
-                proteinG: Math.round(fresh.proteinG * 10) / 10,
-                fatG: Math.round(fresh.fatG * 10) / 10,
-                carbsG: Math.round(fresh.carbsG * 10) / 10,
-              }
-            : item;
-        }),
-      );
+      const { items } = await recalculate(draft, assignment);
+      setDraft(items);
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "計算し直せませんでした",
@@ -347,18 +320,18 @@ function MealCard({
 
           <Button
             className="w-full"
-            onClick={recalculate}
+            onClick={recompute}
             loading={recalculating}
             disabled={!draft.some((item) => item.name.trim())}
           >
-            分量から AI で計算し直す
+            名前と分量から AI で計算し直す
           </Button>
           {recalculating && (
             <Scanning
               variant="panel"
               everySec={3}
               steps={[
-                "分量を読み取っています",
+                "料理名と分量を読んでいます",
                 "カロリーを計算しています",
                 "PFC を出しています",
               ]}

@@ -23,9 +23,10 @@ const Body = z
     /** Anything the photo cannot show: "ドレッシング大さじ2", "ごはん大盛り". */
     hint: z.string().max(300).optional(),
     /** A correction pass. The photo cannot show how much milk went into
-     *  the glass; the person who poured it can. When these are present the
-     *  names and amounts are taken as given and only the numbers are
-     *  worked out again. */
+     *  the glass, and it can read 納豆 as 煮豆; the person who ate it can
+     *  correct either. When these are present both the names and the
+     *  amounts are taken as given and only the numbers are worked out
+     *  again. */
     items: z
       .array(z.object({ name: z.string().min(1), quantity: z.string() }))
       .min(1)
@@ -57,6 +58,9 @@ advice は、この食事をダイエット中の人が食べた前提での実�
 - **その品目名と分量が正解**。人が実物を見て直した値なので、写真や
   一般的な常識より優先する。「牛乳150ml」を「50ml」に直したなら、
   50ml として計算する。
+- 料理名も同じ。写真から「煮豆」と読んだものが「納豆」に直されていたら、
+  それは納豆である。写真の見た目に引きずられず、直された料理名の
+  栄養値で計算し直す。
 - 品目を増やしたり減らしたり、名前や分量を書き換えたりしない。
   返す items は与えられた順・同じ数・同じ name と quantity にする。
 - 計算し直すのは kcal と PFC だけ。
@@ -76,7 +80,7 @@ export const POST = route(async (request) => {
       ? "次の品目と分量で、カロリーと PFC を計算し直してください。\n" + listed
       : "この写真の食事を解析してください。",
     listed && body.imageBase64
-      ? "写真も添えますが、分量は上の申告が優先です。"
+      ? "写真も添えますが、料理名も分量も上の申告が優先です。写真は分量を測る手がかりとしてだけ使ってください。"
       : undefined,
     body.hint ? `補足情報: ${body.hint}` : undefined,
   ]

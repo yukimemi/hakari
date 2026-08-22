@@ -13,7 +13,7 @@ import { prepareImage } from "../lib/image";
 import { saveMeal, uploadPhoto } from "../data/store";
 import Scanning from "./Scanning";
 import MealItemsEditor from "./MealItemsEditor";
-import { BLANK, type MealDraft } from "../lib/meal";
+import { BLANK, recalculate, type MealDraft } from "../lib/meal";
 import {
   Alert,
   Button,
@@ -76,7 +76,9 @@ export default function MealCapture({
   const [hint, setHint] = useState("");
   const [items, setItems] = useState<Draft[] | null>(null);
   const [advice, setAdvice] = useState<string | null>(null);
-  const [phase, setPhase] = useState<"idle" | "analyzing" | "saving">("idle");
+  const [phase, setPhase] = useState<
+    "idle" | "analyzing" | "recalculating" | "saving"
+  >("idle");
   const [error, setError] = useState<string | null>(null);
 
   // Opening straight into the camera is the whole point of the dashboard
@@ -136,6 +138,34 @@ export default function MealCapture({
       setAdvice(res.analysis.advice);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "解析に失敗しました");
+    } finally {
+      setPhase("idle");
+    }
+  };
+
+  // The first reading is a draft, and a draft you cannot argue with is
+  // not a draft. Reading 納豆 as 煮豆 used to mean saving the wrong meal
+  // and then editing it back — a round trip through the log for something
+  // caught before it was ever written.
+  const recompute = async () => {
+    if (!items?.some((item) => item.name.trim())) return;
+    setPhase("recalculating");
+    setError(null);
+    try {
+      const result = await recalculate(
+        items,
+        assignment,
+        // Still on hand here, unlike when correcting a saved meal, and
+        // worth sending: it cannot overrule a typed row, but it is what
+        // the amount is judged against once the name has changed.
+        image ? { base64: image.base64, mediaType: image.mediaType } : undefined,
+      );
+      setItems(result.items);
+      setAdvice(result.advice);
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "計算し直せませんでした",
+      );
     } finally {
       setPhase("idle");
     }
@@ -304,6 +334,26 @@ export default function MealCapture({
           )}
 
           <MealItemsEditor items={items} onChange={setItems} />
+
+          <Button
+            className="w-full"
+            onClick={recompute}
+            loading={phase === "recalculating"}
+            disabled={!items.some((item) => item.name.trim())}
+          >
+            名前と分量から AI で計算し直す
+          </Button>
+          {phase === "recalculating" && (
+            <Scanning
+              variant="panel"
+              everySec={3}
+              steps={[
+                "料理名と分量を読んでいます",
+                "カロリーを計算しています",
+                "PFC を出しています",
+              ]}
+            />
+          )}
 
           <div className="flex items-center justify-between border-t border-rule/60 pt-3">
             <div>
