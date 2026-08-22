@@ -37,6 +37,13 @@ service cloud.firestore {
       return hasAccess() && request.auth.uid == uid;
     }
 
+    // Which clip is the adopted one for each exercise. Shared, like the
+    // clips themselves; written only by the owner.
+    match /config/clips {
+      allow read: if hasAccess();
+      allow write: if email() == owner();
+    }
+
     // The invite list. Readable by anyone already on it — the API routes
     // use exactly that to decide whether a caller is invited, so a denial
     // here is the same answer as an empty list. Only the owner writes.

@@ -62,9 +62,18 @@ function docUrl(uid: string, date: string): string {
 export async function consumeCall(
   uid: string,
   idToken: string,
+  opts: {
+    /** Which allowance to draw on. Video costs by the second and text by
+     *  the token, so they are counted apart — a generous limit on one must
+     *  not become a generous limit on the other. Each bucket is its own
+     *  document, so the monotonic rule that makes the counter tamper-proof
+     *  applies unchanged. */
+    bucket?: string;
+    limit?: number;
+  } = {},
 ): Promise<{ used: number; limit: number }> {
-  const limit = dailyLimit();
-  const date = todayInTokyo();
+  const limit = opts.limit ?? dailyLimit();
+  const date = opts.bucket ? `${todayInTokyo()}-${opts.bucket}` : todayInTokyo();
   const url = docUrl(uid, date);
   const auth = { Authorization: `Bearer ${idToken}` };
 
@@ -83,7 +92,9 @@ export async function consumeCall(
 
   if (used >= limit) {
     throw new UsageError(
-      `今日の AI 呼び出し上限 (${limit} 回) に達しました。日付が変わると戻ります。`,
+      opts.bucket === "clip"
+        ? `今日の動画生成の上限 (${limit} 本) に達しました。日付が変わると戻ります。`
+        : `今日の AI 呼び出し上限 (${limit} 回) に達しました。日付が変わると戻ります。`,
     );
   }
 

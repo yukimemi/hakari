@@ -158,6 +158,24 @@ export const api = {
     });
   },
 
+  /** Starts a demonstration clip. Owner only, enforced on the server. */
+  startClip(args: {
+    exerciseId: string;
+  }): Promise<{ operation: string; exerciseId: string }> {
+    return call("/api/clip", { method: "POST", body: args });
+  },
+
+  /** Polls it. Once done the clip is already in storage at `path`. */
+  clipStatus(args: {
+    operation: string;
+    exerciseId: string;
+  }): Promise<{ done: boolean; path?: string }> {
+    return call(
+      `/api/clip?operation=${encodeURIComponent(args.operation)}&exerciseId=${encodeURIComponent(args.exerciseId)}`,
+      { method: "GET" },
+    );
+  },
+
   coach(args: {
     assignment: TaskAssignment;
     recentDays: {

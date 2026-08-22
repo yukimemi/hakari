@@ -1,7 +1,7 @@
 // Training screen: generate a week, then have the avatar demonstrate.
 
 import { useEffect, useMemo, useState } from "react";
-import { useUid } from "../auth/context";
+import { useAuth, useUid } from "../auth/context";
 import { useSettings, useUserDoc, useWeights } from "../data/hooks";
 import { saveUserSlice, saveWorkout } from "../data/store";
 import AvatarStage from "../avatar/AvatarStage";
@@ -19,6 +19,9 @@ import { formatKcal } from "../lib/format";
 import { api, ApiError } from "../lib/api";
 import Scanning from "../components/Scanning";
 import WorkoutLog from "../components/WorkoutLog";
+import ClipStage from "../components/ClipStage";
+import { useClips } from "../data/clips";
+import { isOwner } from "../../shared/access";
 import { ageFrom, bmi, exerciseKcal, todayKey } from "../../shared/calc";
 import { EXERCISE_BY_ID } from "../../shared/exercises";
 import type { PlanExercise } from "../../shared/schema";
@@ -218,6 +221,18 @@ function Demonstration({
 
   useEffect(() => cancelSpeech, []);
 
+  const { user } = useAuth();
+  const owner = isOwner(user?.email);
+  const clips = useClips();
+  const clip = clips[exercise.id];
+  // A clip is the better demonstration when there is one; the avatar is
+  // the fallback, not the other way round. Derived rather than synced:
+  // `prefer` records only a deliberate switch, so a clip arriving mid-view
+  // does not need a write inside an effect to be picked up.
+  const [prefer, setPrefer] = useState<boolean | null>(null);
+  const showClip = prefer ?? Boolean(clip);
+  const setShowClip = setPrefer;
+
   const minutes = Math.max(1, Math.round(elapsedSec / 60));
   const kcal = def
     ? exerciseKcal({ mets: def.mets, weightKg, minutes })
@@ -233,16 +248,46 @@ function Demonstration({
           </Button>
         }
       >
-        <div className="h-80 w-full overflow-hidden rounded-lg bg-sunk">
-          <AvatarStage
-            src={avatarSrc}
-            shape={shape}
+        {showClip ? (
+          <ClipStage
             exerciseId={exercise.id}
-            speed={speed}
-            paused={paused}
-            className="h-full w-full"
+            adopted={clip}
+            canGenerate={owner}
           />
-        </div>
+        ) : (
+          <div className="h-80 w-full overflow-hidden rounded-lg bg-sunk">
+            <AvatarStage
+              src={avatarSrc}
+              shape={shape}
+              exerciseId={exercise.id}
+              speed={speed}
+              paused={paused}
+              className="h-full w-full"
+            />
+          </div>
+        )}
+
+        {(clip || owner) && (
+          <div className="mt-2 flex gap-1">
+            {[
+              { value: true, label: "動画" },
+              { value: false, label: "3D" },
+            ].map((option) => (
+              <button
+                key={option.label}
+                type="button"
+                onClick={() => setShowClip(option.value)}
+                className={`rounded-lg px-2 py-1 text-xs transition-colors ${
+                  showClip === option.value
+                    ? "bg-sunk text-ink"
+                    : "text-muted hover:text-ink"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="mt-3 flex items-center gap-2">
           <Button onClick={() => setPaused((p) => !p)}>

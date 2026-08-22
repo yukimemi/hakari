@@ -28,6 +28,15 @@ service firebase.storage {
       return email() != '' && (email() == owner() || invited());
     }
 
+    // Demonstration clips are about the exercise, not about a person, so
+    // everyone who may use the app may watch them. Generating one costs
+    // money by the second, so only the owner writes — the same line drawn
+    // around invitations.
+    match /clips/{file} {
+      allow read: if hasAccess();
+      allow write, delete: if email() == owner();
+    }
+
     match /users/{uid}/{kind}/{file} {
       allow read, delete: if hasAccess() && request.auth.uid == uid;
 
