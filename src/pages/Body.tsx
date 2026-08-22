@@ -7,9 +7,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useUid } from "../auth/context";
 import { useBodyPhotos, useSettings, useUserDoc, useWeights } from "../data/hooks";
-import { photoUrl, saveBodyPhoto, saveUserSlice, uploadPhoto } from "../data/store";
+import { saveBodyPhoto, saveUserSlice, uploadPhoto } from "../data/store";
 import AvatarStage from "../avatar/AvatarStage";
 import Scanning from "../components/Scanning";
+import PhotoFilm from "../components/PhotoFilm";
 import { lerpShape, projectShape, shapeFromBmi } from "../avatar/bodyShape";
 import { measureBody, releaseModels, MeasureError, type BodyMeasurements } from "../vision/measure";
 import { prepareImage } from "../lib/image";
@@ -192,7 +193,7 @@ export default function Body() {
         uploadPhoto={(blob, name) => uploadPhoto(uid, "body", blob, name)}
       />
 
-      {photos.length > 0 && <PhotoStrip />}
+      {photos.length > 0 && <PhotoFilm photos={photos} />}
     </>
   );
 }
@@ -456,62 +457,6 @@ function BodyCapture({
           </div>
         </div>
       )}
-    </Panel>
-  );
-}
-
-/** Timeline of body photos. Same pose, same spot, weeks apart — the
- *  comparison people actually want. */
-function PhotoStrip() {
-  const { data: photos } = useBodyPhotos();
-  const [urls, setUrls] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const entries = await Promise.all(
-        photos.map(async (photo) => {
-          try {
-            return [photo.id, await photoUrl(photo.photoPath)] as const;
-          } catch {
-            return null;
-          }
-        }),
-      );
-      if (!cancelled) {
-        setUrls(Object.fromEntries(entries.filter((e) => e !== null)));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [photos]);
-
-  return (
-    <Panel title="記録した写真">
-      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
-        {photos.map((photo) => (
-          <figure key={photo.id} className="w-28 shrink-0">
-            {urls[photo.id] ? (
-              <img
-                src={urls[photo.id]}
-                alt={`${photo.date} の記録`}
-                className="h-40 w-28 rounded-lg border border-rule/60 object-cover"
-              />
-            ) : (
-              <div className="h-40 w-28 rounded-lg border border-rule/60 bg-sunk" />
-            )}
-            <figcaption className="mt-1 text-center">
-              <span className="reading block text-xs">{photo.date.slice(5)}</span>
-              {photo.weightKg && (
-                <span className="reading block text-xs font-semibold">
-                  {formatKg(photo.weightKg)}kg
-                </span>
-              )}
-            </figcaption>
-          </figure>
-        ))}
-      </div>
     </Panel>
   );
 }
