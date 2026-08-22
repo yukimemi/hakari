@@ -12,18 +12,18 @@ import { api, ApiError, type EncodedImage } from "../lib/api";
 import { prepareImage } from "../lib/image";
 import { saveMeal, uploadPhoto } from "../data/store";
 import Scanning from "./Scanning";
+import MealItemsEditor from "./MealItemsEditor";
+import { BLANK, type MealDraft } from "../lib/meal";
 import {
   Alert,
   Button,
   Field,
-  NumberInput,
   Panel,
   Select,
   TextInput,
 } from "./ui";
 import { formatKcal } from "../lib/format";
 import type {
-  MealItem,
   MealSlot,
   TaskAssignment,
 } from "../../shared/schema";
@@ -50,7 +50,7 @@ function defaultSlot(): MealSlot {
   return "snack";
 }
 
-type Draft = MealItem & { confidence: number };
+type Draft = MealDraft;
 
 export default function MealCapture({
   date,
@@ -174,13 +174,6 @@ export default function MealCapture({
     }
   };
 
-  const patch = (index: number, changes: Partial<Draft>) =>
-    setItems((prev) =>
-      prev
-        ? prev.map((item, i) => (i === index ? { ...item, ...changes } : item))
-        : prev,
-    );
-
   return (
     <Panel
       title={items ? "確認して保存" : "食事を記録"}
@@ -223,9 +216,7 @@ export default function MealCapture({
           </Button>
           <Button
             onClick={() =>
-              setItems([
-                { name: "", quantity: "", kcal: 0, proteinG: 0, fatG: 0, carbsG: 0, confidence: 1 },
-              ])
+              setItems([{ ...BLANK }])
             }
           >
             写真なしで手入力する
@@ -312,76 +303,7 @@ export default function MealCapture({
             </Alert>
           )}
 
-          {items.map((item, index) => (
-            <div
-              key={index}
-              className="rounded-lg border border-rule/60 bg-sunk p-3"
-            >
-              <div className="flex items-start gap-2">
-                <div className="min-w-0 flex-1 space-y-2">
-                  <TextInput
-                    value={item.name}
-                    placeholder="料理名"
-                    onChange={(e) => patch(index, { name: e.target.value })}
-                  />
-                  <TextInput
-                    value={item.quantity}
-                    placeholder="分量"
-                    className="text-sm"
-                    onChange={(e) => patch(index, { quantity: e.target.value })}
-                  />
-                </div>
-                <button
-                  onClick={() =>
-                    setItems((prev) => prev?.filter((_, i) => i !== index) ?? null)
-                  }
-                  className="rounded-lg p-2 text-muted hover:text-needle"
-                  aria-label={`${item.name || "この品目"}を削除`}
-                >
-                  <TrashIcon />
-                </button>
-              </div>
-
-              {item.confidence < 0.5 && (
-                <p className="mt-2 text-xs text-warn">
-                  分量が読み取りにくい写真です。実際と違う場合は直してください。
-                </p>
-              )}
-
-              <div className="mt-2 grid grid-cols-4 gap-2">
-                {(
-                  [
-                    ["kcal", "kcal"],
-                    ["proteinG", "P g"],
-                    ["fatG", "F g"],
-                    ["carbsG", "C g"],
-                  ] as const
-                ).map(([key, label]) => (
-                  <label key={key} className="block">
-                    <span className="engraved block mb-1 text-[10px]">{label}</span>
-                    <NumberInput
-                      value={item[key]}
-                      onChange={(e) =>
-                        patch(index, { [key]: Number(e.target.value) || 0 })
-                      }
-                      className="!text-base !py-1.5"
-                    />
-                  </label>
-                ))}
-              </div>
-            </div>
-          ))}
-
-          <Button
-            onClick={() =>
-              setItems((prev) => [
-                ...(prev ?? []),
-                { name: "", quantity: "", kcal: 0, proteinG: 0, fatG: 0, carbsG: 0, confidence: 1 },
-              ])
-            }
-          >
-            品目を追加
-          </Button>
+          <MealItemsEditor items={items} onChange={setItems} />
 
           <div className="flex items-center justify-between border-t border-rule/60 pt-3">
             <div>
@@ -437,22 +359,3 @@ function CameraIcon() {
   );
 }
 
-function TrashIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M4 7h16" />
-      <path d="M10 11v6M14 11v6" />
-      <path d="M6 7l1 13h10l1-13" />
-      <path d="M9 7V4h6v3" />
-    </svg>
-  );
-}

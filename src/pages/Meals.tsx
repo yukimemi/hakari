@@ -5,18 +5,25 @@ import { useSearchParams } from "react-router-dom";
 import { useUid } from "../auth/context";
 import { useMealsOfDay, useSettings, useWorkoutsOfDay } from "../data/hooks";
 import { useTargets } from "../data/useTargets";
-import { deleteMeal, type StoredMeal, photoUrl } from "../data/store";
+import { deleteMeal, saveMeal, type StoredMeal, photoUrl } from "../data/store";
+import MealItemsEditor from "../components/MealItemsEditor";
+import { type MealDraft } from "../lib/meal";
+import { api, ApiError } from "../lib/api";
+import Scanning from "../components/Scanning";
 import MealCapture from "../components/MealCapture";
 import DayNav from "../components/DayNav";
 import {
+  Alert,
   Button,
   Empty,
+  Field,
   Panel,
   Reading,
+  Select,
 } from "../components/ui";
 import { formatKcal } from "../lib/format";
 import { todayKey } from "../../shared/calc";
-import type { MealSlot } from "../../shared/schema";
+import type { MealSlot, TaskAssignment } from "../../shared/schema";
 
 const SLOT_LABEL: Record<MealSlot, string> = {
   breakfast: "朝食",
@@ -129,6 +136,7 @@ export default function Meals() {
         <MealCard
           key={meal.id}
           meal={meal}
+          assignment={settings.ai.meal}
           onDelete={() => deleteMeal(uid, meal.id, meal.photoPath)}
         />
       ))}
@@ -138,12 +146,23 @@ export default function Meals() {
 
 function MealCard({
   meal,
+  assignment,
   onDelete,
 }: {
   meal: StoredMeal;
+  assignment: TaskAssignment;
   onDelete: () => void;
 }) {
+  const uid = useUid();
   const [confirming, setConfirming] = useState(false);
+  // Null while not editing. Seeded from the record on entry rather than
+  // held in sync with it, so a half-finished correction is not overwritten
+  // by the snapshot it came from.
+  const [draft, setDraft] = useState<MealDraft[] | null>(null);
+  const [slot, setSlot] = useState<MealSlot>(meal.slot);
+  const [saving, setSaving] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
 
   // Storage URLs are signed and time-limited, so they are fetched per view
@@ -165,11 +184,110 @@ function MealCard({
     };
   }, [meal.photoPath]);
 
+  const startEdit = () => {
+    setConfirming(false);
+    setSlot(meal.slot);
+    setDraft(meal.items.map((item) => ({ ...item })));
+  };
+
+  // The photo cannot show how much milk went into the glass; the person
+  // who poured it can. Correct the amount, and the numbers behind it are
+  // worked out again from the corrected amount rather than left stale.
+  const recalculate = async () => {
+    if (!draft) return;
+    const items = draft.filter((item) => item.name.trim());
+    if (!items.length) return;
+    setRecalculating(true);
+    setError(null);
+    try {
+      const res = await api.analyzeMeal({
+        assignment,
+        items: items.map((item) => ({
+          name: item.name,
+          quantity: item.quantity,
+        })),
+      });
+      // Matched by position, and the names and amounts stay as typed: the
+      // model was asked to recompute, not to rewrite. If it returns a
+      // different number of rows, the numbers it did return are still
+      // applied to the rows they line up with.
+      setDraft(
+        items.map((item, index) => {
+          const fresh = res.analysis.items[index];
+          // Rounded on arrival. A recomputed 1.65g of protein is not more
+          // accurate than 1.7g, it just looks like it is — and the raw
+          // value would sit in the input field saying so.
+          return fresh
+            ? {
+                ...item,
+                kcal: Math.round(fresh.kcal),
+                proteinG: Math.round(fresh.proteinG * 10) / 10,
+                fatG: Math.round(fresh.fatG * 10) / 10,
+                carbsG: Math.round(fresh.carbsG * 10) / 10,
+              }
+            : item;
+        }),
+      );
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "計算し直せませんでした",
+      );
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
+  const save = async () => {
+    if (!draft) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const items = draft.filter((item) => item.name.trim());
+      // Everything not being edited is carried across verbatim: the photo,
+      // where it came from, the date. Dropping them would quietly turn a
+      // corrected meal into a different one.
+      await saveMeal(
+        uid,
+        {
+          date: meal.date,
+          slot,
+          // The confidence flag belongs to the photo reading, not to the
+          // record it produced; once a human has been through the numbers
+          // it means nothing.
+          items: items.map((item) => ({
+            name: item.name,
+            quantity: item.quantity,
+            kcal: item.kcal,
+            proteinG: item.proteinG,
+            fatG: item.fatG,
+            carbsG: item.carbsG,
+          })),
+          totalKcal: items.reduce((sum, item) => sum + item.kcal, 0),
+          photoPath: meal.photoPath,
+          source: meal.source,
+        },
+        meal.id,
+      );
+      setDraft(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存に失敗しました");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <Panel
       title={SLOT_LABEL[meal.slot]}
       action={
-        confirming ? (
+        draft ? (
+          <div className="flex gap-2">
+            <Button variant="primary" onClick={save} loading={saving}>
+              保存
+            </Button>
+            <Button onClick={() => setDraft(null)}>やめる</Button>
+          </div>
+        ) : confirming ? (
           <div className="flex gap-2">
             <Button variant="danger" onClick={onDelete}>
               削除する
@@ -182,6 +300,9 @@ function MealCard({
               {formatKcal(meal.totalKcal)}
               <span className="ml-1 text-xs font-medium text-muted">kcal</span>
             </span>
+            <Button onClick={startEdit} className="!px-2">
+              編集
+            </Button>
             <Button onClick={() => setConfirming(true)} className="!px-2">
               …
             </Button>
@@ -205,6 +326,54 @@ function MealCard({
         </a>
       )}
 
+      {error && <Alert tone="error">{error}</Alert>}
+
+      {draft ? (
+        <div className="space-y-3">
+          <Field label="どの食事">
+            <Select
+              value={slot}
+              onChange={(e) => setSlot(e.target.value as MealSlot)}
+            >
+              {Object.entries(SLOT_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <MealItemsEditor items={draft} onChange={setDraft} />
+
+          <Button
+            className="w-full"
+            onClick={recalculate}
+            loading={recalculating}
+            disabled={!draft.some((item) => item.name.trim())}
+          >
+            分量から AI で計算し直す
+          </Button>
+          {recalculating && (
+            <Scanning
+              variant="panel"
+              everySec={3}
+              steps={[
+                "分量を読み取っています",
+                "カロリーを計算しています",
+                "PFC を出しています",
+              ]}
+            />
+          )}
+
+          <div className="flex items-baseline justify-between border-t border-rule/60 pt-3">
+            <span className="engraved">合計</span>
+            <span className="reading text-2xl font-bold">
+              {formatKcal(draft.reduce((sum, item) => sum + item.kcal, 0))}
+              <span className="ml-1 text-sm font-medium text-muted">kcal</span>
+            </span>
+          </div>
+        </div>
+      ) : (
       <ul className="divide-y divide-rule/60">
         {meal.items.map((item, index) => (
           <li key={index} className="flex items-baseline justify-between gap-3 py-2">
@@ -221,6 +390,7 @@ function MealCard({
           </li>
         ))}
       </ul>
+      )}
     </Panel>
   );
 }

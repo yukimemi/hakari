@@ -92,18 +92,23 @@ export const api = {
   },
 
   analyzeMeal(args: {
-    image: EncodedImage;
+    /** Omitted for a text-only recalculation. */
+    image?: EncodedImage;
     assignment: TaskAssignment;
     hint?: string;
+    /** Present for a correction pass: the names and amounts are taken as
+     *  given and only the numbers are worked out again. */
+    items?: { name: string; quantity: string }[];
   }): Promise<{ analysis: MealAnalysis; provider: ProviderId; model: string }> {
     return call("/api/analyze-meal", {
       method: "POST",
       body: {
-        imageBase64: args.image.base64,
-        mediaType: args.image.mediaType,
+        imageBase64: args.image?.base64,
+        mediaType: args.image?.mediaType,
         provider: args.assignment.provider,
         model: args.assignment.model,
         hint: args.hint,
+        items: args.items,
       },
     });
   },
