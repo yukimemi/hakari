@@ -238,6 +238,9 @@ function MealCard({
           totalKcal: items.reduce((sum, item) => sum + item.kcal, 0),
           photoPath: meal.photoPath,
           source: meal.source,
+          // Carried across so a correction keeps the meal where it is in
+          // the day's list rather than jumping to the top.
+          createdAt: meal.createdAt,
         },
         meal.id,
       );

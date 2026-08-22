@@ -22,6 +22,7 @@ import {
   serverTimestamp,
   setDoc,
   where,
+  type Timestamp,
   type Unsubscribe,
 } from "firebase/firestore";
 import {
@@ -172,7 +173,28 @@ export async function deleteWeight(uid: string, date: string): Promise<void> {
 // Meals
 // ---------------------------------------------------------------------------
 
-export type StoredMeal = MealEntry & { id: string };
+/** `createdAt` is the ordering key. Absent on meals written before it
+ *  existed, which is why the comparator has a fallback. */
+export type StoredMeal = MealEntry & { id: string; createdAt?: Timestamp };
+
+const SLOT_ORDER = { breakfast: 0, lunch: 1, dinner: 2, snack: 3 } as const;
+
+/**
+ * Newest first — the meal just logged is the one being looked at.
+ *
+ * Meals from before `createdAt` was recorded fall back to the order a day
+ * is eaten in, reversed. They sort below the dated ones, which is right:
+ * anything dated was written after the change, so it is newer than
+ * anything that was not.
+ */
+export function newestFirst(a: StoredMeal, b: StoredMeal): number {
+  const at = a.createdAt?.toMillis();
+  const bt = b.createdAt?.toMillis();
+  if (at !== undefined && bt !== undefined) return bt - at;
+  if (at !== undefined) return -1;
+  if (bt !== undefined) return 1;
+  return SLOT_ORDER[b.slot] - SLOT_ORDER[a.slot];
+}
 
 export function watchMeals(
   uid: string,
@@ -189,14 +211,20 @@ export function watchMeals(
     (snap) =>
       onChange(
         snap.docs
-          .map((d) => ({ id: d.id, ...(d.data() as MealEntry) }))
-          .sort((a, b) => SLOT_ORDER[a.slot] - SLOT_ORDER[b.slot]),
+          // A `serverTimestamp()` reads back as null until the server
+          // confirms it, so without an estimate a meal would appear at
+          // the bottom of the list and jump to the top a moment later.
+          .map((d) => ({
+            id: d.id,
+            ...(d.data({ serverTimestamps: "estimate" }) as MealEntry & {
+              createdAt?: Timestamp;
+            }),
+          }))
+          .sort(newestFirst),
       ),
     onError,
   );
 }
-
-const SLOT_ORDER = { breakfast: 0, lunch: 1, dinner: 2, snack: 3 } as const;
 
 export function watchMealsInRange(
   uid: string,
@@ -220,13 +248,19 @@ export function watchMealsInRange(
 
 export async function saveMeal(
   uid: string,
-  meal: MealEntry,
+  meal: MealEntry & { createdAt?: Timestamp },
   id?: string,
 ): Promise<string> {
   const target = id
     ? doc(db(), "users", uid, "meals", id)
     : doc(collection(db(), "users", uid, "meals"));
-  await setDoc(target, { ...forWrite(meal), updatedAt: serverTimestamp() });
+  await setDoc(target, {
+    ...forWrite(meal),
+    // Stamped once, when the meal is first written. Correcting a typo an
+    // hour later should not shuffle breakfast above dinner.
+    createdAt: meal.createdAt ?? serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
   return target.id;
 }
 
