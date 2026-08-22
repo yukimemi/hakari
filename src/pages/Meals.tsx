@@ -265,10 +265,12 @@ function MealCard({
           </div>
         ) : confirming ? (
           <div className="flex gap-2">
-            <Button variant="danger" onClick={onDelete}>
-              削除する
+            <Button variant="danger" onClick={onDelete} className="!px-2">
+              消す
             </Button>
-            <Button onClick={() => setConfirming(false)}>戻る</Button>
+            <Button onClick={() => setConfirming(false)} className="!px-2">
+              やめる
+            </Button>
           </div>
         ) : (
           <div className="flex items-center gap-3">
@@ -279,8 +281,12 @@ function MealCard({
             <Button onClick={startEdit} className="!px-2">
               編集
             </Button>
+            {/* Named, not 「…」: a menu affordance that hides one
+                destructive action is a guessing game, and the weight log
+                spells it out. Confirmation replaces these in place, so
+                the two screens read the same way. */}
             <Button onClick={() => setConfirming(true)} className="!px-2">
-              …
+              削除
             </Button>
           </div>
         )
