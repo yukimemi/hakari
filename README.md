@@ -40,26 +40,67 @@ AI 呼び出しは Vercel Functions 経由。
 
 ## セットアップ
 
-Firebase プロジェクト **hakari-app** (asia-northeast1) は作成済みで、`.env` にも
-実値が入っている。Firestore・Storage・セキュリティルールも反映済み。
+```sh
+pnpm install
+cp .env.example .env
+```
 
-残っている手動作業は 1 つだけ:
+**`.env` はリポジトリに入っていない** (`.gitignore` 済み)。`.env.example` は
+空の雛形なので、自分の Firebase プロジェクトの値を入れる。
 
-- [Firebase コンソール](https://console.firebase.google.com/project/hakari-app/authentication/providers)
-  → Authentication → Sign-in method → **Google を有効化**
+### 1. Firebase
 
-  Google プロバイダは OAuth クライアントの発行を伴うため、ここだけ CLI / API では
-  完結しない。有効化すると `localhost` は自動で承認済みドメインに入る。
+プロジェクトを作り、Firestore と Storage を用意する。gcloud だけで一通り
+作れる (手順は [作り直す場合](#作り直す場合) を参照)。ウェブアプリを登録して
+構成値を `.env` の `VITE_FIREBASE_*` と `FIREBASE_PROJECT_ID` に入れる。
 
-### AI のキー
+これらは**ブラウザに埋め込まれる前提の公開値**で、秘密ではない。守っているのは
+`firestore.rules` と `storage.rules` であって、この値を隠すことではない。
 
-`.env` には**書いていない**。`~/.config/powershell/private.ps1` が
-`GEMINI_API_KEY` / `OPENAI_API_KEY` / `OPENROUTER_API_KEY` をシェルに
-export しており、dev サーバはそれをそのまま関数へ渡す。鍵の置き場所を
-増やさないための判断。
+続けて、ルールを反映する:
 
-本番 (Vercel) では同じ名前でプロジェクトの環境変数に登録する。
+```sh
+pnpm exec firebase deploy --only firestore:rules,storage
+```
+
+**コンソールでの作業が 1 つだけ残る** — Authentication → Sign-in method →
+**Google を有効化**。OAuth クライアントの発行を伴うため、ここだけ CLI / API で
+完結しない。有効化すると `localhost` は自動で承認済みドメインに入る。
+本番ドメインは自分で追加する。
+
+### 2. アクセスできる人を決める
+
+`shared/access.ts` の `OWNER_EMAIL` を自分の Google アカウントにする。
+同じアドレスを `firestore.rules` と `storage.rules` にも書く (ルールは
+コードを読めないので、3 箇所を手で揃える)。詳しくは
+[アクセス制御](#アクセス制御)。
+
+### 3. AI のキー
+
+最低 1 つ。`.env` に書いてもいいし、シェルで export してもいい —
+**既にシェルにあるものが優先される** (dotenv と同じ規則)。
+
+```
+ANTHROPIC_API_KEY=...    # 写真の分量推定が最も安定
+GEMINI_API_KEY=...       # 無料枠が大きい
+OPENAI_API_KEY=...
+OPENROUTER_API_KEY=...   # 実測では一番速かった
+DEEPSEEK_API_KEY=...     # 安い。ただし出力が大きい処理は遅い
+```
+
+このリポジトリの持ち主は `.env` に書かず、シェルのプロファイルから
+export している (鍵の置き場所を増やさないため)。どちらでも動く。
+
+本番 (Vercel) では同じ名前をプロジェクトの環境変数に登録する。
 **キーはサーバ側だけで使われ、ブラウザには渡らない。**
+
+任意の調整:
+
+| 変数 | 既定 | 用途 |
+| --- | --- | --- |
+| `DAILY_CALL_LIMIT` | 60 | 1 ユーザー 1 日あたりの AI 呼び出し上限 |
+| `PROVIDER_TIMEOUT_MS` | 280000 | プロバイダ 1 回の待ち上限。`vercel.json` の `maxDuration` より内側にすること |
+| `<PROVIDER>_MODEL` | — | 既定モデルの上書き。設定画面での選択が優先される |
 
 ### 起動
 
