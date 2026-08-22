@@ -7,6 +7,7 @@
 // so the same definition drives every provider.
 
 import { z } from "zod";
+import { DEFAULT_CLIP_SUBJECT } from "./clipPrompt.js";
 import { PROVIDER_IDS } from "./providers.js";
 
 /** `yyyy-MM-dd` in the user's local timezone. Used as the Firestore doc id
@@ -237,7 +238,7 @@ export const Settings = z.object({
   /** Who appears in a generated demonstration clip, in English, because
    *  that is what Veo reads best. Kept short: long prompts get caught by
    *  its filter. */
-  clipSubject: z.string().max(200).default("A Japanese woman in sportswear"),
+  clipSubject: z.string().max(200).default(DEFAULT_CLIP_SUBJECT),
 });
 export type Settings = z.infer<typeof Settings>;
 
@@ -262,5 +263,5 @@ export const DEFAULT_SETTINGS: Settings = {
   avatarSrc: "/avatars/trainer.vrm",
   voiceEnabled: true,
   voicePitch: 1.35,
-  clipSubject: "A Japanese woman in sportswear",
+  clipSubject: DEFAULT_CLIP_SUBJECT,
 };

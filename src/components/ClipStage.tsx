@@ -12,10 +12,12 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { adoptClip, clipUrl, discardClip, type ClipRef } from "../data/clips";
-import { Alert, Button } from "./ui";
+import { EXERCISE_BY_ID } from "../../shared/exercises";
+import { MAX_CLIP_PROMPT, clipPrompt } from "../../shared/clipPrompt";
+import { Alert, Button, TextArea } from "./ui";
 import Scanning from "./Scanning";
 
-type Take = { path: string; url: string };
+type Take = { path: string; url: string; prompt: string };
 
 export default function ClipStage({
   exerciseId,
@@ -34,6 +36,22 @@ export default function ClipStage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cancelled = useRef(false);
+
+  // What the next attempt will send. Starts from the prompt behind the
+  // adopted clip when there is one — a take that came out right is a
+  // better starting point than the generic default — and otherwise from
+  // the default composed from the exercise and the subject.
+  // An id with no exercise behind it cannot be generated for anyway —
+  // the route rejects it — so an empty suggestion is enough here, and
+  // better than throwing inside a render.
+  const exercise = EXERCISE_BY_ID.get(exerciseId);
+  const fallback = exercise ? clipPrompt(exercise, subject) : "";
+  const suggested = adopted?.prompt ?? fallback;
+  // `null` means "whatever is suggested", so adopting a take moves the
+  // box on without an effect syncing one piece of state to another. The
+  // component is keyed by exercise, so switching exercises clears it.
+  const [override, setOverride] = useState<string | null>(null);
+  const prompt = override ?? suggested;
 
   useEffect(() => {
     cancelled.current = false;
@@ -71,7 +89,11 @@ export default function ClipStage({
     setBusy(true);
     setError(null);
     try {
-      const { operation } = await api.startClip({ exerciseId, subject });
+      const { operation, prompt: sent } = await api.startClip({
+        exerciseId,
+        subject,
+        prompt: prompt.trim() || undefined,
+      });
       // Eleven seconds at best, six minutes at worst, so this polls rather
       // than holding a request open.
       for (let attempt = 0; attempt < 60 && !cancelled.current; attempt++) {
@@ -85,7 +107,7 @@ export default function ClipStage({
         }
         if (status.done && status.path) {
           const url = await clipUrl(status.path);
-          if (!cancelled.current) setTake({ path: status.path, url });
+          if (!cancelled.current) setTake({ path: status.path, url, prompt: sent });
           return;
         }
       }
@@ -129,14 +151,44 @@ export default function ClipStage({
       )}
 
       {canGenerate && !busy && (
+        <div className="mt-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="engraved">送るプロンプト</span>
+            {prompt !== fallback && (
+              <button
+                type="button"
+                onClick={() => setOverride(fallback)}
+                className="text-xs text-muted underline underline-offset-4 hover:text-ink"
+              >
+                既定に戻す
+              </button>
+            )}
+          </div>
+          <TextArea
+            value={prompt}
+            rows={3}
+            maxLength={MAX_CLIP_PROMPT}
+            onChange={(e) => setOverride(e.target.value)}
+            className="mt-1 text-sm"
+          />
+          <p className="mt-1 text-xs text-muted">
+            英語のほうがよく通ります。長いほど安全フィルタに弾かれやすいので、
+            足すのは一言ずつが確実です。
+          </p>
+        </div>
+      )}
+
+      {canGenerate && !busy && (
         <div className="mt-2 flex flex-wrap gap-2">
           {take ? (
             <>
               <Button
                 variant="primary"
                 onClick={async () => {
-                  await adoptClip(exerciseId, take.path, adopted?.path);
+                  await adoptClip(exerciseId, take, adopted?.path);
                   setTake(null);
+                  // The adopted prompt becomes the new starting point.
+                  setOverride(null);
                 }}
               >
                 これにする

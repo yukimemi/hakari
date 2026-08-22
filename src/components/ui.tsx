@@ -2,7 +2,7 @@
 // carries a reading) or a sunk well (an input). Keeping that distinction
 // in two components is what stops the instrument metaphor from drifting.
 
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
 
 export function Panel({
   title,
@@ -101,6 +101,15 @@ const inputClass =
 
 export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${inputClass} ${props.className ?? ""}`} />;
+}
+
+export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      {...props}
+      className={`${inputClass} resize-y leading-relaxed ${props.className ?? ""}`}
+    />
+  );
 }
 
 /** Numeric input with the reading typeface — keeps entered values looking

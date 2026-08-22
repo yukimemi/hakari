@@ -13,6 +13,7 @@
 
 import { z } from "zod";
 import { EXERCISE_BY_ID } from "../shared/exercises.js";
+import { MAX_CLIP_PROMPT, clipPrompt } from "../shared/clipPrompt.js";
 import { isOwner } from "../shared/access.js";
 import { json, readJson, route, BadRequest } from "./_lib/http.js";
 import { requireUser, AuthError } from "./_lib/auth.js";
@@ -33,6 +34,10 @@ const Start = z.object({
   exerciseId: z.string().min(1),
   /** Who should be in it. Comes from settings so taste is the user's. */
   subject: z.string().max(200).optional(),
+  /** The whole prompt, when the owner has edited it. Sent verbatim: the
+   *  point of showing the box is that what is in it is what is asked
+   *  for. Falls back to the composed default when absent. */
+  prompt: z.string().max(MAX_CLIP_PROMPT).optional(),
 });
 
 function apiKey(): string {
@@ -63,7 +68,7 @@ async function ownerOnly(request: Request) {
 
 export const POST = route(async (request) => {
   const user = await ownerOnly(request);
-  const { exerciseId, subject } = await readJson(request, Start);
+  const { exerciseId, subject, prompt: edited } = await readJson(request, Start);
 
   const exercise = EXERCISE_BY_ID.get(exerciseId);
   if (!exercise) throw new BadRequest("知らない種目です");
@@ -74,10 +79,7 @@ export const POST = route(async (request) => {
     limit: CLIP_LIMIT,
   });
 
-  // One short sentence: who, doing what, where. Veo's filter caught every
-  // longer prompt that tried to also direct the camera and the audio.
-  const who = subject?.trim() || "A person";
-  const prompt = `${who} doing ${exercise.english} in a bright gym. Full body in frame.`;
+  const prompt = edited?.trim() || clipPrompt(exercise, subject);
 
   const response = await fetch(`${BASE}/models/${MODEL}:predictLongRunning`, {
     method: "POST",
@@ -119,7 +121,9 @@ export const POST = route(async (request) => {
   const started = (await response.json()) as { name?: string };
   if (!started.name) throw new BadRequest("operation が返りませんでした");
 
-  return json({ operation: started.name, exerciseId });
+  // Handed back so the client can show, and store alongside an adopted
+  // take, the words that actually produced it.
+  return json({ operation: started.name, exerciseId, prompt });
 });
 
 export const GET = route(async (request) => {

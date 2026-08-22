@@ -162,7 +162,9 @@ export const api = {
   startClip(args: {
     exerciseId: string;
     subject?: string;
-  }): Promise<{ operation: string; exerciseId: string }> {
+    /** The whole prompt, when it has been edited. Sent verbatim. */
+    prompt?: string;
+  }): Promise<{ operation: string; exerciseId: string; prompt: string }> {
     return call("/api/clip", { method: "POST", body: args });
   },
 

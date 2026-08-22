@@ -253,6 +253,9 @@ function Demonstration({
       >
         {showClip ? (
           <ClipStage
+            // Keyed so the prompt box does not carry one exercise's
+            // wording over to the next.
+            key={exercise.id}
             exerciseId={exercise.id}
             adopted={clip}
             canGenerate={owner}

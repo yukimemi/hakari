@@ -15,6 +15,10 @@ export type ClipRef = {
   /** Storage path of the adopted take. */
   path: string;
   generatedAt: string;
+  /** The words that produced it. Kept so the next attempt starts from
+   *  what worked rather than from the generic default — the difference
+   *  between a clip of the right exercise and another lottery ticket. */
+  prompt?: string;
 };
 
 export type Clips = Record<string, ClipRef>;
@@ -50,17 +54,23 @@ export function useClips(): Clips {
  *  does not pile up in storage. */
 export async function adoptClip(
   exerciseId: string,
-  path: string,
+  take: { path: string; prompt: string },
   previous?: string,
 ): Promise<void> {
   await setDoc(
     clipsRef(),
     forMerge({
-      clips: { [exerciseId]: { path, generatedAt: new Date().toISOString() } },
+      clips: {
+        [exerciseId]: {
+          path: take.path,
+          prompt: take.prompt,
+          generatedAt: new Date().toISOString(),
+        },
+      },
     }) as Record<string, unknown>,
     { merge: true },
   );
-  if (previous && previous !== path) {
+  if (previous && previous !== take.path) {
     try {
       await deletePhoto(previous);
     } catch {
