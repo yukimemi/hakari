@@ -1,0 +1,196 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* hakari — the instrument.
+ *
+ * The whole surface is modelled on a measuring device: a cool panel
+ * ground, hairline rules for the graduations, and exactly one saturated
+ * colour, reserved for the needle. Nothing else in the app is allowed to
+ * use the needle red, so the eye always knows where the reading is.
+ */
+
+:root {
+  /* Tells the browser which way to render the controls it draws itself —
+   * the date picker glyph, select arrows, scrollbars. Without it they are
+   * painted for a light page and vanish against the dark panel. */
+  color-scheme: light;
+
+  --bg: #e9ebee;
+  --panel: #ffffff;
+  --panel-sunk: #f2f4f6;
+  --ink: #16191c;
+  --muted: #6e7780;
+  --rule: #c8cdd3;
+  --rule-strong: #a8b0b8;
+  --needle: #d93e28;
+  --goal: #1f7a6a;
+  --warn: #b26a12;
+  --shadow: 0 1px 2px rgb(22 25 28 / 0.06), 0 4px 16px rgb(22 25 28 / 0.05);
+
+  /* Chart steps, picked against the panel surface and checked for CVD
+   * separation rather than eyeballed. The raw daily series is deliberately
+   * low-contrast — it is the noise the trend line reads through — which is
+   * why the weight screen always ships the log table beneath the chart. */
+  --chart-trend: #d93e28;
+  --chart-raw: #a8b0b8;
+  --chart-goal: #0f6b57;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --bg: #101317;
+    --panel: #1b1f24;
+    --panel-sunk: #161a1f;
+    --ink: #e9ecef;
+    --muted: #8b949e;
+    --rule: #2c333a;
+    --rule-strong: #3d4650;
+    --needle: #ff5a3c;
+    --goal: #35c4a8;
+    --warn: #e0a34a;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.3);
+
+    /* Re-stepped against the dark panel, not flipped from the light set. */
+    --chart-trend: #ff5a3c;
+    --chart-raw: #6b7681;
+    --chart-goal: #35c4a8;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Noto Sans JP", -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN",
+    "Yu Gothic UI", "Meiryo", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Room for the fixed tab bar plus the iOS home indicator. */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Readings — weights, calories, counts. Tabular so digits do not shift
+ * width as the numbers tick, which is what makes a gauge feel unstable. */
+.reading {
+  font-family: "Archivo", "Segoe UI", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.02em;
+}
+
+/* Instrument labels: small, wide-tracked, uppercase — the text engraved
+ * on a device rather than written in a document. */
+.engraved {
+  font-family: "Archivo", "Segoe UI", system-ui, sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The graduation field behind panels: hairline ticks every 8px. Sits at
+ * very low contrast — felt rather than read. */
+.graduated {
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--rule) 0 1px,
+    transparent 1px 8px
+  );
+  background-repeat: no-repeat;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Keyboard focus stays visible everywhere; the needle colour marks it so
+ * focus reads as "the thing being measured right now". */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--needle);
+  outline-offset: 2px;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* The scanning pass used while an AI call is in flight (Scanning.tsx).
+ *
+ * Two directions: down a photo, and across a bar when there is no photo to
+ * read. Both are the needle colour, faded at the edges so the moving part
+ * is a leading edge rather than a rule — a pass being taken, not a divider.
+ * `prefers-reduced-motion` turns the travel off and leaves a steady glow;
+ * the step text and the seconds counter carry the message on their own. */
+.scan-sweep-y {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--needle) 22%, transparent) 55%,
+    color-mix(in srgb, var(--needle) 85%, transparent) 92%,
+    transparent 100%
+  );
+  animation: scan-y 2.4s cubic-bezier(0.55, 0, 0.45, 1) infinite;
+}
+
+@keyframes scan-y {
+  0% {
+    transform: translateY(-40%);
+  }
+  100% {
+    transform: translateY(300%);
+  }
+}
+
+.scan-track {
+  background: var(--rule);
+}
+
+.scan-sweep-x {
+  background: var(--needle);
+  animation: scan-x 1.6s cubic-bezier(0.55, 0, 0.45, 1) infinite;
+}
+
+@keyframes scan-x {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(310%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-sweep-y,
+  .scan-sweep-x {
+    animation: none;
+  }
+  .scan-sweep-y {
+    opacity: 0.35;
+  }
+  .scan-sweep-x {
+    width: 100%;
+    transform: none;
+  }
+}

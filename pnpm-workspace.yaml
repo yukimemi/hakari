@@ -1,0 +1,7 @@
+# pnpm 11 reads build-script policy from here, not from package.json.
+# All three are firebase-tools' transitive deps; none of their build steps
+# are needed for the CLI or the app to run.
+allowBuilds:
+  '@firebase/util': false
+  protobufjs: false
+  re2: false

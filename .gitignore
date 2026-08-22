@@ -1,0 +1,44 @@
+# kata:gitignore:base:begin
+# Editor / OS noise — kata-managed (yukimemi/pj-base).
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# APM dependencies — install output of apm.yml's deps.
+# Skill files under .agents/, .claude/, .gemini/ etc. are
+# committed (kata seeds them; renri post_create refreshes via
+# `apm install --update`); the apm_modules/ source cache is not.
+apm_modules/
+# kata:gitignore:base:end
+# kata:gitignore:pnpm:begin
+# Node / pnpm — kata-managed (yukimemi/pj-pnpm).
+node_modules/
+dist/
+build/
+coverage/
+.pnpm-store/
+.eslintcache
+.tsbuildinfo
+*.tsbuildinfo
+
+# Local env — committed envs go to .env.example instead.
+.env
+.env.*
+!.env.example
+
+# Tooling logs.
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+# kata:gitignore:pnpm:end
+
+.vercel
+.env*
+
+# The trainer avatar is fetched, not vendored: this repo is public and the
+# model is someone else's work. `pnpm run avatar` downloads it.
+public/avatars/*.vrm

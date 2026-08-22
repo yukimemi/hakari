@@ -1,0 +1,78 @@
+rules_version = '2';
+
+// Every document belongs to exactly one user and is only ever read or
+// written by that user. There is no sharing surface, so the rules are
+// correspondingly narrow: match the uid in the path against the
+// authenticated uid, and reject everything else.
+//
+// Owning a Google account is not enough. The app sits on a public URL, so
+// access is by invitation: the owner is a constant here (which is what
+// makes locking yourself out impossible) and guests live in
+// `config/access`, which the owner edits from the settings screen.
+//
+// Keep the owner address in step with shared/access.ts and storage.rules.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function owner() {
+      return 'yukimemi@gmail.com';
+    }
+
+    function email() {
+      return request.auth != null && request.auth.token.email_verified == true
+        ? request.auth.token.email.lower()
+        : '';
+    }
+
+    function invited() {
+      return exists(/databases/$(database)/documents/config/access)
+        && email() in get(/databases/$(database)/documents/config/access).data.allowedEmails;
+    }
+
+    function hasAccess() {
+      return email() != '' && (email() == owner() || invited());
+    }
+
+    function isOwner(uid) {
+      return hasAccess() && request.auth.uid == uid;
+    }
+
+    // The invite list. Readable by anyone already on it — the API routes
+    // use exactly that to decide whether a caller is invited, so a denial
+    // here is the same answer as an empty list. Only the owner writes.
+    match /config/access {
+      allow read: if hasAccess();
+      allow write: if email() == owner();
+    }
+
+    // Profile, goal, settings, latest body analysis and the current plan.
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      // weights/{yyyy-MM-dd}, meals/{id}, workouts/{id}, bodyPhotos/{id}
+      //
+      // `usage` is excluded: matching rules are OR-ed, so leaving it in
+      // here would hand back the write access the block below withholds.
+      match /{collection}/{document} {
+        allow read: if isOwner(uid);
+        allow write: if isOwner(uid) && collection != 'usage';
+      }
+
+      // The daily AI-call counter. The API routes write it with the
+      // caller's own token, which means the caller can reach it from the
+      // browser too — so the rule, not the caller, is what makes it a
+      // limit: one step up at a time, starting at one, never removed.
+      match /usage/{date} {
+        allow create: if isOwner(uid) && request.resource.data.calls == 1;
+        allow update: if isOwner(uid)
+          && request.resource.data.calls == resource.data.calls + 1;
+        allow delete: if false;
+      }
+    }
+
+    // Anything else is not part of this app.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

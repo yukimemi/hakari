@@ -1,0 +1,47 @@
+rules_version = '2';
+
+// Meal and body photos. Same model as Firestore: the uid is in the path
+// and must match the caller, and the caller must be the owner or someone
+// the owner invited. Storage rules can reach into Firestore, so the invite
+// list lives in one place rather than being copied here.
+//
+// Keep the owner address in step with shared/access.ts and firestore.rules.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function owner() {
+      return 'yukimemi@gmail.com';
+    }
+
+    function email() {
+      return request.auth != null && request.auth.token.email_verified == true
+        ? request.auth.token.email.lower()
+        : '';
+    }
+
+    function invited() {
+      return firestore.exists(/databases/(default)/documents/config/access)
+        && email() in firestore.get(/databases/(default)/documents/config/access).data.allowedEmails;
+    }
+
+    function hasAccess() {
+      return email() != '' && (email() == owner() || invited());
+    }
+
+    match /users/{uid}/{kind}/{file} {
+      allow read, delete: if hasAccess() && request.auth.uid == uid;
+
+      // Uploads are capped and must be images — the client downscales to
+      // roughly 1280px/JPEG before upload, so 8MB is generous headroom
+      // rather than a limit anyone hits.
+      allow write: if hasAccess()
+        && request.auth.uid == uid
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
