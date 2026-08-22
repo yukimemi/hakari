@@ -7,7 +7,6 @@
 // of the same numbers.
 
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import {
   CartesianGrid,
   Line,
@@ -18,6 +17,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useSubView } from "../lib/subview";
 import { useUid } from "../auth/context";
 import { useUserDoc, useWeights } from "../data/hooks";
 import { deleteWeight, saveWeight } from "../data/store";
@@ -32,14 +32,19 @@ import {
   TextInput,
 } from "../components/ui";
 import { formatKg } from "../lib/format";
+import type { WeightEntry } from "../../shared/schema";
 import { movingAverage, projectGoalDate, todayKey } from "../../shared/calc";
 
 export default function Weight() {
   const uid = useUid();
-  const [params] = useSearchParams();
   const { data: user } = useUserDoc();
   const { data: weights, loading } = useWeights();
-  const [logging, setLogging] = useState(params.get("log") === "1");
+  // In the URL like the other sub-views, so back closes the form and the
+  // dashboard's shortcut does not leave `?log=1` behind once it is done.
+  const log = useSubView("log");
+  const logging = log.value === "1";
+  const [editing, setEditing] = useState<WeightEntry | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
 
   const goal = user.goal!;
 
@@ -209,13 +214,35 @@ export default function Weight() {
         )}
       </Panel>
 
-      {logging ? (
+      {logging || editing ? (
         <WeightForm
-          onDone={() => setLogging(false)}
-          onSave={(entry) => saveWeight(uid, entry)}
+          // Keyed so switching straight from one record to another
+          // refills the fields instead of keeping the first one's.
+          key={editing?.date ?? "new"}
+          entry={editing ?? undefined}
+          onDone={() => {
+            if (logging) log.close();
+            setEditing(null);
+          }}
+          onSave={async (next) => {
+            // The date is the document id, so moving a record is a write
+            // and a delete rather than an update. Refusing to land on a
+            // day that already has a reading is the point: silently
+            // overwriting one measurement with another loses a number
+            // nobody can go back and take again.
+            if (editing && next.date !== editing.date) {
+              if (weights.some((w) => w.date === next.date)) {
+                throw new Error(`${next.date} にはすでに記録があります`);
+              }
+              await saveWeight(uid, next);
+              await deleteWeight(uid, editing.date);
+              return;
+            }
+            await saveWeight(uid, next);
+          }}
         />
       ) : (
-        <Button variant="primary" size="lg" onClick={() => setLogging(true)}>
+        <Button variant="primary" size="lg" onClick={() => log.open("1")}>
           今日の体重を記録
         </Button>
       )}
@@ -243,13 +270,41 @@ export default function Weight() {
                     {entry.bodyFatPct ? `${entry.bodyFatPct.toFixed(1)}%` : "—"}
                   </td>
                   <td className="py-2 text-right">
-                    <button
-                      onClick={() => deleteWeight(uid, entry.date)}
-                      className="text-xs text-muted hover:text-needle"
-                      aria-label={`${entry.date} の記録を削除`}
-                    >
-                      削除
-                    </button>
+                    {confirming === entry.date ? (
+                      <span className="flex justify-end gap-2">
+                        <button
+                          onClick={() => deleteWeight(uid, entry.date)}
+                          className="text-xs font-semibold text-needle"
+                        >
+                          消す
+                        </button>
+                        <button
+                          onClick={() => setConfirming(null)}
+                          className="text-xs text-muted"
+                        >
+                          やめる
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="flex justify-end gap-3">
+                        <button
+                          onClick={() => setEditing(entry)}
+                          className="text-xs text-muted hover:text-ink"
+                          aria-label={`${entry.date} の記録を直す`}
+                        >
+                          編集
+                        </button>
+                        {/* Two steps, because it now sits next to a
+                            button people mean to press. */}
+                        <button
+                          onClick={() => setConfirming(entry.date)}
+                          className="text-xs text-muted hover:text-needle"
+                          aria-label={`${entry.date} の記録を削除`}
+                        >
+                          削除
+                        </button>
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -262,9 +317,12 @@ export default function Weight() {
 }
 
 function WeightForm({
+  entry,
   onSave,
   onDone,
 }: {
+  /** The record being corrected, or nothing when adding one. */
+  entry?: WeightEntry;
   onSave: (entry: {
     date: string;
     weightKg: number;
@@ -273,9 +331,11 @@ function WeightForm({
   }) => Promise<void>;
   onDone: () => void;
 }) {
-  const [date, setDate] = useState(todayKey());
-  const [weightKg, setWeightKg] = useState("");
-  const [bodyFatPct, setBodyFatPct] = useState("");
+  const [date, setDate] = useState(entry?.date ?? todayKey());
+  const [weightKg, setWeightKg] = useState(entry ? String(entry.weightKg) : "");
+  const [bodyFatPct, setBodyFatPct] = useState(
+    entry?.bodyFatPct === undefined ? "" : String(entry.bodyFatPct),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -303,7 +363,7 @@ function WeightForm({
 
   return (
     <Panel
-      title="体重を記録"
+      title={entry ? "体重を直す" : "体重を記録"}
       action={
         <Button onClick={onDone} className="text-muted">
           やめる
@@ -332,7 +392,10 @@ function WeightForm({
             />
           </Field>
         </div>
-        <Field label="日付">
+        <Field
+          label="日付"
+          hint={entry ? "変えると、その日の記録として移ります" : undefined}
+        >
           <TextInput
             type="date"
             value={date}
@@ -342,7 +405,7 @@ function WeightForm({
         </Field>
         {error && <Alert tone="error">{error}</Alert>}
         <Button type="submit" variant="primary" size="lg" loading={busy}>
-          記録する
+          {entry ? "保存する" : "記録する"}
         </Button>
       </form>
     </Panel>
