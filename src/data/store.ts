@@ -48,12 +48,21 @@ import {
 import { ACCESS_DOC, type AccessDoc } from "../../shared/access";
 import { forMerge, forWrite } from "./sanitise";
 
+/** How an analysis reads back out of Firestore, as opposed to what the
+ *  model is required to return. Documents are never migrated, so anything
+ *  written before a field existed simply lacks it — `estimatedWaistCm` is
+ *  absent on every analysis stored before it was added to the schema, and
+ *  callers have to handle that rather than trust the LLM contract. */
+export type StoredBodyAnalysis = Omit<BodyAnalysis, "estimatedWaistCm"> & {
+  estimatedWaistCm?: number;
+};
+
 export type UserDoc = {
   profile?: Profile;
   goal?: Goal;
   settings?: Settings;
   /** Result of the most recent body-photo analysis. */
-  body?: BodyAnalysis & { photoPath?: string; analyzedAt?: string };
+  body?: StoredBodyAnalysis & { photoPath?: string; analyzedAt?: string };
   plan?: WorkoutPlan & { generatedAt?: string };
   /** The dashboard one-liner. Stored with the day it was written for, so
    *  a stale comment from yesterday is recognisable as stale rather than
@@ -362,7 +371,7 @@ export type BodyPhotoRecord = {
   date: string;
   photoPath: string;
   weightKg?: number;
-  analysis?: BodyAnalysis;
+  analysis?: StoredBodyAnalysis;
   /** Upload time. `date` is day-granular, so this is what separates two
    *  photos taken on the same day — without it Firestore breaks the tie
    *  by document id, and anything reading a "since the last photo" delta
