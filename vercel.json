@@ -3,6 +3,12 @@
   "buildCommand": "pnpm build",
   "outputDirectory": "dist",
   "framework": "vite",
+  "regions": ["hnd1"],
+  "functions": {
+    "api/*.ts": {
+      "maxDuration": 300
+    }
+  },
   "rewrites": [
     {
       "source": "/((?!api(?:/|$)).*)",
