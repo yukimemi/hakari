@@ -1,0 +1,97 @@
+# kata-managed — source: yukimemi/pj-pnpm/.github/workflows/ci.yml.tera
+# Local edits are reverted on the next `kata apply`. Push fixes upstream.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Job id `check`, with no `name:` override so the status check is
+  # reported under exactly that string. That name is the interface:
+  # it is what a consumer puts in branch protection (or in
+  # `gh api repos/OWNER/REPO/branches/main/protection`) to require CI
+  # before merge, so it has to be short, stable and layer-neutral —
+  # renaming it later silently un-requires the check in every project
+  # that already listed it.
+  #
+  # One job on one runner on purpose. A matrix would multiply the check
+  # names a consumer has to enumerate (pj-rust's `check (ubuntu-latest)`
+  # / `(windows-latest)` / `(macos-latest)`) to buy nothing here: lint,
+  # tsc and vitest are platform-independent for a browser bundle, and
+  # the deploy targets these projects ship to build on Linux anyway.
+  #
+  # Every step below is unconditional — no `if: hashFiles(...)` escape
+  # hatches for a scaffold whose deps are not installed yet. A green
+  # check that skipped lint, build and test is worse than a red one:
+  # a required check that cannot fail is exactly the vacuous gate that
+  # lets an unreviewed auto-apply PR merge itself.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Checkout first, pnpm second: with no `version:` input the action
+      # reads `packageManager` out of the checked-out `package.json`, and
+      # with no workspace on disk it fails with "No workspace is found".
+      #
+      # Omitting `version:` is not just DRY. `packageManager`
+      # (`pnpm@10` in this layer's scaffold) is the single source of
+      # truth, and declaring the version in both places hard-errors with
+      # "Multiple versions of pnpm specified" the moment the two
+      # disagree — i.e. the first time Renovate bumps `packageManager`
+      # in a consumer, which would break CI in every project at once
+      # while the workflow itself still looked correct.
+      - uses: pnpm/action-setup@v6
+
+      # After pnpm, never before: `cache: "pnpm"` makes setup-node shell
+      # out to `pnpm store path --silent` to locate the store, so pnpm
+      # has to be on PATH already or the step dies with "Unable to
+      # locate executable file: pnpm".
+      #
+      # The cache key is the hash of `pnpm-lock.yaml`, and setup-node
+      # fails outright when it finds no lockfile — so this step doubles
+      # as the guard that the lockfile is actually committed, which is
+      # what the `--frozen-lockfile` install below relies on.
+      #
+      # `node-version` tracks the Active LTS line and is bumped centrally
+      # here, not per consumer: the file is `when = "always"`, so every
+      # project moves together on the next `kata apply`. Quoted so a
+      # future two-part version (`"24.10"`) is not read as a YAML float
+      # and truncated to 24.1.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      # `--frozen-lockfile` is the contract this layer's AGENTS block
+      # already documents: CI installs exactly what the lockfile
+      # resolves to and fails on a `package.json` that drifted from it,
+      # instead of quietly resolving something newer than what was
+      # reviewed.
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      # `pnpm build` rather than a bare `pnpm exec tsc -b`. This layer's
+      # `build` script is `tsc -b && vite build`, so it is a superset of
+      # the type-check — running both would invoke the same compiler
+      # twice — and the bundler half is the part that catches what type
+      # checking structurally cannot: an import that resolves for tsc
+      # but not for Vite, a broken plugin or `vite.config.ts`, a missing
+      # asset, an env var only read at build time. It is also the exact
+      # command the layers above run to ship (`pnpm build` in
+      # pj-firebase's `deploy.yml` and in the `buildCommand` of its
+      # `vercel.json`), so a bundle that cannot be built fails here on
+      # the PR instead of mid-deploy. The cost is a coarser signal —
+      # "build failed" covers both type and bundle errors — which the
+      # step log resolves in one glance.
+      - run: pnpm build
+
+      - run: pnpm test

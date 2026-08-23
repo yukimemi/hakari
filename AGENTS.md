@@ -281,6 +281,37 @@ This block is owned by `yukimemi/pj-pnpm` and re-applied on every
 - `pnpm lint` — ESLint on the whole tree.
 - `pnpm test` — Vitest run-once. `pnpm test:watch` for the loop.
 
+### CI
+
+- `.github/workflows/ci.yml` is kata-managed, rendered from this
+  layer's `ci.yml.tera`. Local edits are reverted on the next
+  `kata apply` — push fixes upstream, and put project-specific CI in
+  a separate workflow file.
+- One job, `check`, on `ubuntu-latest`: `pnpm install
+  --frozen-lockfile` → `pnpm lint` → `pnpm build` → `pnpm test`.
+  There is no separate `tsc -b` step because `build` already starts
+  with one; running the bundler too is what catches an import or a
+  `vite.config.ts` that type-checks but cannot be built.
+- Triggers are `pull_request`, `push` to `main`, and
+  `workflow_dispatch`. Concurrent runs on the same ref are cancelled.
+- **`check` is the status check to require for merge.** Add it to
+  `main`'s branch protection. With nothing required a PR is mergeable
+  the moment it opens, so an automated PR (`kata apply`, Renovate)
+  can land unreviewed — and GitHub refuses to arm auto-merge on an
+  already-mergeable PR, so the arming step in pj-base's
+  `kata-apply.yml` has nothing to wait on either.
+- Action versions are pins in `.kata/vars.toml` —
+  `actions.pnpm_action_setup` and `actions.setup_node` from this
+  layer, `actions.checkout` from pj-base. Never write a version into
+  the workflow. The `# renovate:` annotations that make the two pnpm
+  pins bumpable live upstream in `vars.pnpm.toml`, not in the merged
+  copy here, so a newer pin arrives via
+  `kata apply --reseed .kata/vars.toml`.
+- pnpm itself is set up with no `version:` input: `packageManager` in
+  `package.json` is the only place the pnpm version is declared, and
+  supplying both makes `pnpm/action-setup` fail with "Multiple
+  versions of pnpm specified" as soon as they drift.
+
 ### TypeScript
 
 - Project-references layout: root `tsconfig.json` references
