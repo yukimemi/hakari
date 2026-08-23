@@ -18,7 +18,6 @@ const Measurements = z.object({
    *  they are camera-distance independent. */
   shoulderWidthRatio: z.number(),
   hipWidthRatio: z.number(),
-  waistWidthRatio: z.number(),
   shoulderToHipRatio: z.number(),
   torsoLengthRatio: z.number(),
   legLengthRatio: z.number(),
@@ -47,6 +46,8 @@ const SYSTEM = `あなたはパーソナルトレーナーです。利用者本�
   身長と体重から期待される平均体型と比べて、写真がどう違うかを表現します。
   範囲は必ず -1.0 〜 1.0 に収めてください。
 - focusAreas は運動メニュー生成の入力になります。部位名で簡潔に。
+- ウエスト・胸・腕の太さは骨格推定では測れません。渡される実測値は骨格だけなので、
+  この3つは写真のシルエットから自分で読み取ってください。
 
 姿勢の原則:
 - これは医学的診断ではありません。健康状態や病気について述べないでください。
@@ -73,14 +74,14 @@ export const POST = route(async (request) => {
     const m = body.measurements;
     lines.push(
       "",
-      "写真から実測した比率 (身長を1.0としたときの値):",
+      "骨格推定で実測した比率 (身長を1.0としたときの値):",
       `- 肩幅: ${m.shoulderWidthRatio.toFixed(3)}`,
-      `- ウエスト幅: ${m.waistWidthRatio.toFixed(3)}`,
       `- ヒップ幅: ${m.hipWidthRatio.toFixed(3)}`,
       `- 肩幅/ヒップ幅: ${m.shoulderToHipRatio.toFixed(3)}`,
       `- 胴の長さ: ${m.torsoLengthRatio.toFixed(3)}`,
       `- 脚の長さ: ${m.legLengthRatio.toFixed(3)}`,
-      "これらは骨格推定による実測値です。shape の値はこの比率と整合させてください。",
+      "これらは骨格の実測値です。shape の shoulder と hip、胴と脚の釣り合いは",
+      "この比率に合わせてください。ウエスト・胸・腕は写真から判断してください。",
     );
   } else {
     lines.push(

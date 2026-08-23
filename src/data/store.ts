@@ -362,6 +362,12 @@ export type BodyPhotoRecord = {
   photoPath: string;
   weightKg?: number;
   analysis?: BodyAnalysis;
+  /** Upload time. `date` is day-granular, so this is what separates two
+   *  photos taken on the same day — without it Firestore breaks the tie
+   *  by document id, and anything reading a "since the last photo" delta
+   *  off this list can then read it backwards. Absent on photos written
+   *  before it existed, which is why the comparator has a fallback. */
+  createdAt?: Timestamp;
 };
 
 export function watchBodyPhotos(
@@ -377,9 +383,15 @@ export function watchBodyPhotos(
     q,
     (snap) =>
       onChange(
-        snap.docs.map(
-          (d) => ({ id: d.id, ...d.data() }) as BodyPhotoRecord,
-        ),
+        snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }) as BodyPhotoRecord)
+          // Ordering by both fields server-side would need a composite
+          // index, and the whole collection is already in hand.
+          .sort(
+            (a, b) =>
+              a.date.localeCompare(b.date) ||
+              (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0),
+          ),
       ),
     onError,
   );
