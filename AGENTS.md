@@ -605,9 +605,11 @@ to the counter, i.e. an uncapped spend. The day boundary is Asia/Tokyo
 
 ### `api/` conventions
 
-- **Named method exports, never `export default`.** Vercel's Node
-  runtime reads a default export as `(req, res) => void` and discards the
-  return value, so a Web `Response` vanishes. Write
+- **Every route is a named method export.** A bare
+  `export default function handler(req, res)` is the legacy Node handler
+  and its return value is discarded, so a `Response` built inside it
+  reaches nobody. (`export default { fetch(request) { … } }` is a
+  supported Web-standard shape, just not the one used here.) Write
   `export const POST = route(async (request) => …)` (`GET` likewise).
 - **Relative imports carry `.js`** — `./_lib/http.js`,
   `../../shared/access.js`. These files are not bundled; Node ESM
@@ -649,6 +651,26 @@ missing `.js`).
 (`vite.config.ts`, `vite-plugin-api.ts`, `api`, `shared`, node types).
 `shared/` sits in both, so it must stay free of DOM-only *and* Node-only
 APIs — no `window`, no `process`.
+
+### What kata does not own here
+
+Three files carry settings this project needs and no template can
+guess. They were lost once — auto-apply PR #14 (merged 01:50Z,
+2026-08-23) reverted all three, and for 25 minutes production served
+`index.html` for every `/api/*` request:
+
+| File | This project's part |
+| --- | --- |
+| `tsconfig.app.json` | `include: ["src", "shared"]` |
+| `tsconfig.node.json` | `include: ["vite.config.ts", "vite-plugin-api.ts", "api", "shared"]` — without it the entire server half goes unchecked |
+| `vercel.json` | `regions` and `functions."api/*.ts".maxDuration` (300 s; `PROVIDER_TIMEOUT_MS` lives inside it) |
+
+Both template layers were fixed upstream afterwards — the tsconfigs are
+`when = "once"` in `pj-react-web` and `vercel.json` is `merge-json` in
+`pj-firebase`, scoped to `$schema` / `buildCommand` / `outputDirectory` /
+`framework` / `rewrites` / `headers`. So kata leaves the rows above
+alone now. Restore them, don't relitigate them, if a future apply ever
+touches them again.
 
 ### Tests
 
