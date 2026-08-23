@@ -1,15 +1,15 @@
 preset = "github.com/yukimemi/pj-presets:web-react-firebase"
-applied_at = "2026-08-23T02:15:04.465359905Z"
+applied_at = "2026-08-23T02:58:52.167516826Z"
 
 [[templates]]
 source = "github.com/yukimemi/pj-base"
-rev = "62de494e1dc6fa312924f2d9dee80b22fcf8d2ab"
-version = "0.15.0"
+rev = "0424dfa03771babdeca3c22f08fe003f2811f820"
+version = "0.16.0"
 
 [[templates]]
 source = "github.com/yukimemi/pj-pnpm"
-rev = "73b6cb62279636896781f781a91aeccb576f10fb"
-version = "0.1.0"
+rev = "fb9f0a7598d5a3d2edff08128ea38cebe3881096"
+version = "0.2.0"
 
 [[templates]]
 source = "github.com/yukimemi/pj-react-web"
@@ -39,6 +39,9 @@ content_hash = "6d380d1ecc2f882c2011429d548a6f3c774b74f0c757d884453e4667172acc2a
 [files.".github/workflows/apm-bump.yml"]
 content_hash = "d7331ae3c991ee893b97dd182ffeabfc5314798a6c9a8595a4c874b1f9b52ad9"
 
+[files.".github/workflows/ci.yml"]
+content_hash = "163b4a3ca156bf03d966e4a7bea2d75acf78e0abab71a6ade60afae595f6e224"
+
 [files.".github/workflows/claude-review.yml"]
 content_hash = "6fa587e82d98ed487b79f42f24eb973d8be675f7842af673c36555ad7bd2ff67"
 
@@ -49,7 +52,7 @@ content_hash = "5b337df6ef3cb3e8cc6be011c8563403e3968d5dce0285952babc9d4b16876d0
 once_applied = true
 
 [files.".github/workflows/kata-apply.yml"]
-content_hash = "d84a852c4416d04837fb2b9c93cd9ebe21fae3457fd469f72b2831d6451817ec"
+content_hash = "dabe8abf66ac3ae701f1ff42771972c840028eaa0cc23a1cdb403d3990606d52"
 
 [files.".gitignore"]
 content_hash = "99ce77ba843c5bee84182b768f18a501f6e76eef3731eb0e899997b33b7c8468"
