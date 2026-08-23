@@ -91,8 +91,8 @@ importers:
         specifier: ^0.5.4
         version: 0.5.4(eslint@10.8.1(jiti@1.21.7)(supports-color@7.2.0))
       firebase-tools:
-        specifier: ^15.28.0
-        version: 15.28.0(@types/node@26.2.0)(supports-color@7.2.0)
+        specifier: ^15.28.1
+        version: 15.28.1(@types/node@26.2.0)(supports-color@7.2.0)
       globals:
         specifier: ^17.11.0
         version: 17.11.0
@@ -3048,8 +3048,8 @@ packages:
     resolution: {integrity: sha512-78/PXT1wlLLDgTzDs7sjq9hzz0vXD+zn+7wypEe4fXQxCmdmqfGsEPQxmiCSQI3ajFV91bVSsvNtrJRiW6nGng==}
     engines: {node: '>=10'}
 
-  firebase-tools@15.28.0:
-    resolution: {integrity: sha512-PQhKyn7XlA4YEGbMvrT8gKxLdTANlTyHC92v8VNFfeKmolw5clMhBcraCcXCcZGC+1JSxeSQA5EivaG+JWIHMw==}
+  firebase-tools@15.28.1:
+    resolution: {integrity: sha512-5qbKmO0Am0++a335zzUe9/TFdM/dn6jGNKVp2JUcHwDrOK+5wU0LT/fGX+8rjQM8AwfzPp+eMowWX1uDGI+aQg==}
     engines: {node: '>=20.0.0 || >=22.0.0 || >=24.0.0'}
     hasBin: true
 
@@ -8715,7 +8715,7 @@ snapshots:
       locate-path: 6.0.0
       path-exists: 4.0.0
 
-  firebase-tools@15.28.0(@types/node@26.2.0)(supports-color@7.2.0):
+  firebase-tools@15.28.1(@types/node@26.2.0)(supports-color@7.2.0):
     dependencies:
       '@apphosting/common': 0.0.8
       '@electric-sql/pglite': 0.3.16
@@ -8944,7 +8944,7 @@ snapshots:
   gcp-metadata@8.1.2(supports-color@7.2.0):
     dependencies:
       gaxios: 7.3.1(supports-color@7.2.0)
-      google-logging-utils: 1.1.3
+      google-logging-utils: 1.2.0
       json-bigint: 1.0.0
     transitivePeerDependencies:
       - supports-color
