@@ -35,7 +35,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.1.0
 
       # Checkout first, pnpm second: with no `version:` input the action
       # reads `packageManager` out of the checked-out `package.json`, and
