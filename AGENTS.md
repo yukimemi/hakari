@@ -13,13 +13,19 @@ here so each tool's auto-load behaviour still finds something.
   - Exception: trivial typo / whitespace / docs wording fixes.
 - Branch names: `feat/...`, `fix/...`, `chore/...`.
 - **PR titles + bodies in English. Commit messages in English.**
-- **Releases are PR-driven, tagging is automatic.** Bump
-  `[workspace.package].version` (workspace) or `[package].version`
-  (single crate) in a `chore/release-vX.Y.Z` PR. On merge to `main`,
-  `.github/workflows/auto-tag.yml` (kata-managed) detects the bump,
-  pushes the `vX.Y.Z` tag, and that tag fires `release.yml` for
-  binary builds + crates.io publish. **Do not run `git tag` by
-  hand** — the bot tag will collide and the manual push fails.
+- **Releases are PR-driven and tagging is automatic** — in repos that
+  ship a release pipeline. Bump the version in the project's own
+  manifest in a `chore/release-vX.Y.Z` PR; on merge to `main` the
+  language layer's `auto-tag.yml` detects the bump, pushes the
+  `vX.Y.Z` tag, and that tag is what fires `release.yml`. **Do not run
+  `git tag` by hand** — the bot tag will collide and the manual push
+  fails. The specifics belong to the layers shipping those two
+  workflows, which are not the same layer: `kata:agents:rust:*` for
+  which file holds the version and for `auto-tag.yml`,
+  `kata:agents:rust-{cli,lib}:*` for what `release.yml` builds and
+  publishes. A repo with no `auto-tag.yml` has no release pipeline at
+  all: nothing tags, and the version field in its manifest may well
+  be decoration.
 
 ### PR review cycle
 
@@ -207,11 +213,52 @@ templates — the bytes between `<!-- kata:*:begin -->` and
 listed in `.kata/applied.toml`. **Editing those bytes locally
 won't survive the next `kata apply`** — push the change to the
 upstream template repo (`yukimemi/pj-base` / `yukimemi/pj-rust` /
-…) instead. The marker scopes are layered:
+…) instead.
 
-- `kata:agents:base:*` — language-agnostic conventions (this section).
-- `kata:agents:rust:*` — added when `pj-rust` applies.
-- `kata:agents:rust-cli:*` — added when `pj-rust-cli` applies.
+The marker scopes are layered, one per applied layer:
+`kata:agents:base:*` is this section, and each layer adds its own
+(`kata:agents:rust:*`, `kata:agents:rust-cli:*`,
+`kata:agents:pnpm:*`, `kata:agents:firebase:*`, …). Which ones apply
+*here* is a grep away: `<!-- kata:` in this file.
+
+### This project's own conventions
+
+Everything a layer ships is generic by construction: it describes the
+stack the template assumed, not what this repo grew into. **Bytes
+outside every marker pair are yours and survive `kata apply`** — so
+project-specific conventions belong in a section of their own, outside
+the markers (conventionally at the end of the file; if a later layer
+appends its block below yours, no matter — kata only ever rewrites
+between its own markers). Same mechanism as the `.gitignore` /
+`.gitattributes` blocks.
+
+Write those conventions down there rather than leaving them in one
+agent's head, in commit archaeology, or in a README the agent will not
+read. What earns a line:
+
+- **Any layer default that does not hold here.** A layer states its
+  assumption flatly ("Hosting is the primary target", "these rules are
+  a placeholder to replace"). When the project has diverged, say so and
+  say why — the layer's text keeps asserting the opposite on every
+  apply, and an agent that only reads the blocks will act on it.
+- **Facts duplicated across files with no compiler in between** — an
+  address or a path that appears in code *and* in a rules/config file
+  that cannot import it, a timeout that has to stay inside another
+  timeout. List every copy, so the next edit finds them all.
+- **kata-shipped files this project deleted on purpose**, together with
+  the `once_applied = true` line in `.kata/applied.toml` that keeps
+  them deleted. Otherwise someone helpfully restores one.
+- **Shapes the runtime forces but no tool checks** — an export form a
+  platform requires, import specifiers that must (or must not) carry a
+  file extension, a directory whose contents are reachable by URL.
+- **Invariants that money or access rest on**, naming the file and line
+  that actually enforces them.
+- **Which language the code speaks versus what a user reads**, when the
+  two differ.
+
+A repo whose `AGENTS.md` is nothing but kata blocks is a repo where
+every agent re-derives all of that from scratch — and gets the layer
+defaults wrong the same way each time.
 <!-- kata:agents:base:end -->
 <!-- kata:agents:pnpm:begin -->
 ## pnpm / TypeScript layer (kata: pj-pnpm)
@@ -335,17 +382,78 @@ This block is owned by `yukimemi/pj-firebase` and re-applied on
 every `kata apply`. Edits go upstream to the template, not to
 this file.
 
-### Hosting
+### Deploy target: pick one, then write the choice down
 
-- **Firebase Hosting** is the primary target — `firebase deploy
-  --only hosting` from local, or the `Deploy to Firebase
-  Hosting` GitHub Actions workflow from `main`.
-- **Vercel** runs in parallel as a same-stack mirror so PR
-  previews work out of the box. Keep `vercel.json` and
-  `firebase.json`'s rewrites/headers in sync — both should
-  rewrite `**` → `/index.html` for SPA routing and emit
+This layer ships both halves — `firebase.json` for Firebase
+Hosting, `vercel.json` for Vercel — because which one a project
+ends up on depends on something the template cannot see: whether
+the app is static.
+
+- **Static front end, Firebase for data.** Firebase Hosting is
+  the target (`firebase deploy --only hosting` locally, or the
+  `Deploy to Firebase Hosting` workflow from `main`), and Vercel
+  runs in parallel as a same-stack mirror so PR previews work out
+  of the box. Keep `vercel.json` and `firebase.json`'s
+  rewrites/headers in sync — both should rewrite `**` →
+  `/index.html` for SPA routing and emit
   `Cross-Origin-Opener-Policy: same-origin-allow-popups`
   (Firebase Auth popup needs this).
+- **Any server-side code — an `api/` directory of Vercel
+  Functions, Next.js route handlers, an LLM call whose key must
+  not reach the browser — makes Vercel the only target that runs
+  the whole app.** Hosting serves static files; it cannot execute
+  a function, so a Hosting deploy publishes a UI whose every
+  server route fails. That is a fork in the road, not a
+  preference: once such a route exists the Hosting path is dead.
+
+On the Vercel-only path, make the choice stick rather than leave
+two half-live pipelines:
+
+- Delete `.github/workflows/deploy.yml`; the
+  `once_applied = true` entry it leaves in `.kata/applied.toml`
+  is what stops the next `kata apply` re-creating it.
+- Keep `firebase.json` / `.firebaserc` anyway — rules deploys
+  still need them (`firebase deploy --only
+  firestore:rules,storage`), Hosting config or not.
+- Put the env in the Vercel project (`vercel env ls`). The
+  GitHub secrets listed below feed the Hosting workflow only.
+- Record it in the project's own section, below the last
+  `kata:*:end`. This block goes on offering Hosting as an option
+  on every apply; the project section is where the answer lives.
+
+### Server routes on Vercel
+
+Only relevant on the Vercel path. The first two fail in ways that
+do not resemble their cause:
+
+- **Match the export form to what the runtime does with it.** The
+  Node runtime accepts three shapes, and one is a trap in a
+  codebase built on Web `Response`: a bare
+  `export default function handler(req, res)` is the *legacy Node
+  handler*, whose return value is discarded — build a `Response`
+  inside it and the client receives nothing. The Web-standard
+  shapes are named method exports (`export const POST = …`,
+  `export function GET(request)`) and a default export of an
+  object carrying a `fetch` method
+  (`export default { fetch(request) { … } }`). Prefer the method
+  exports: one file, one route, one verb per export.
+- **Under `"type": "module"`, relative specifiers in function code
+  carry `.js`** — `./_lib/http.js`, `../../shared/foo.js`, even
+  though the file on disk is `.ts`. That is the shape this stack
+  produces: the pnpm layer's `package.json` is ESM, and standalone
+  `api/*.ts` functions are transpiled per file rather than
+  bundled, so Node's ESM loader resolves the specifier verbatim
+  and refuses an extensionless one
+  (production-only `ERR_MODULE_NOT_FOUND`). Browser code under
+  `src/` stays extensionless because Vite bundles it, so one repo
+  runs both conventions. Framework route handlers that go through
+  a real bundler (Next.js) are exempt — check which side a route
+  is on before copying either rule.
+- A dev-time Vite plugin that mounts `api/` on the dev server is
+  worth its ~100 lines: `pnpm dev` becomes the whole app and the
+  Vercel CLI leaves the local loop. Note that it also masks both
+  mistakes above, since Vite bundles and invokes the handler
+  directly.
 
 ### Rules
 
@@ -354,6 +462,11 @@ this file.
   schema before shipping. Verified-email is required at the
   baseline so Google sign-in's pre-verification flow is the
   default.
+- Both files are `when = "once"`, so kata never writes them
+  again. Once replaced they **are** the app's access control:
+  read a diff against them as a security change, and never
+  "restore the baseline" on the strength of the paragraph above
+  still describing one.
 - Push rules with `firebase deploy --only firestore:rules,storage`
   (or via a project-side `scripts/deploy-rules.ts` helper —
   kakeizu has one as a reference).
@@ -385,13 +498,22 @@ Allow ~1–2 min for IAM propagation before testing.
 
 - `.env.example` documents the `VITE_FIREBASE_*` surface. Copy
   to `.env`, fill in from the Firebase console.
-- The deploy workflow rewrites `.env` from secrets at build time
-  (Vite inlines envs at compile time, so the build container
-  needs them, not the runtime).
-- Required GitHub secrets:
+- The Hosting deploy workflow rewrites `.env` from secrets at
+  build time (Vite inlines envs at compile time, so the build
+  container needs them, not the runtime).
+- GitHub secrets required **on the Hosting path**:
   - `FIREBASE_SERVICE_ACCOUNT` — JSON for a service account
     with the `Firebase Hosting Admin` role.
   - `VITE_FIREBASE_*` — one secret per `.env.example` entry.
+- On the Vercel-only path neither is needed: the same names go in
+  the Vercel project's environment variables, and server-side
+  keys stay **un-prefixed** so they never reach the bundle.
+  `VITE_FIREBASE_*` are public by design — the rules are the
+  protection, not the obscurity of those values.
+
+The `projectId` note below points at `deploy.yml`; on the
+Vercel-only path that file is gone and the project id lives in
+`.firebaserc` plus whatever the app reads at runtime.
 
 ### projectId
 

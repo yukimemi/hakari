@@ -29,4 +29,4 @@ checkout = "v6"
 # renovate: datasource=github-tags depName=peter-evans/create-pull-request
 create_pull_request = "v7"
 # renovate: datasource=github-tags depName=anthropics/claude-code-action
-claude_code_action = "v1"
+claude_code_action = "v1.0.195"
