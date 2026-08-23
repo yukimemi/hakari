@@ -6,7 +6,7 @@
   "regions": ["hnd1"],
   "functions": {
     "api/*.ts": {
-      "maxDuration": 300
+      "maxDuration": 280
     }
   },
   "rewrites": [
