@@ -18,6 +18,7 @@ import {
 import AvatarStage from "../avatar/AvatarStage";
 import Scanning from "../components/Scanning";
 import PhotoFilm from "../components/PhotoFilm";
+import BodyTrend from "../components/BodyTrend";
 import { lerpShape, projectShape, shapeFromBmi } from "../avatar/bodyShape";
 import { measureBody, releaseModels, MeasureError, type BodyMeasurements } from "../vision/measure";
 import { prepareImage } from "../lib/image";
@@ -34,16 +35,6 @@ import {
 import { formatKg } from "../lib/format";
 import { ageFrom, bmi, todayKey } from "../../shared/calc";
 import type { BodyAnalysis } from "../../shared/schema";
-
-/** Strips the non-numeric quality flags before the measurements go over
- *  the wire — the route accepts a plain map of numbers. */
-function numbersOnly(measurements: Record<string, unknown>): Record<string, number> {
-  return Object.fromEntries(
-    Object.entries(measurements).filter(
-      (entry): entry is [string, number] => typeof entry[1] === "number",
-    ),
-  );
-}
 
 export default function Body() {
   const uid = useUid();
@@ -188,6 +179,8 @@ export default function Body() {
           )}
         </Panel>
       )}
+
+      <BodyTrend photos={photos} />
 
       <BodyCapture
         heightCm={profile.heightCm}
@@ -364,19 +357,8 @@ function BodyCapture({
         weightKg,
         sex,
         age,
-        // The API takes numbers; `waistMeasured` is a quality flag, so it
-        // travels in the note instead — the model should discount a waist
-        // that is really a stand-in rather than read it as measured.
-        measurements: measurements ? numbersOnly(measurements) : undefined,
-        note:
-          [
-            note.trim(),
-            measurements && !measurements.waistMeasured
-              ? "ウエスト幅は輪郭を読み取れず腰幅で代用した値なので、ウエストの判断は写真そのものを優先すること。"
-              : "",
-          ]
-            .filter(Boolean)
-            .join(" ") || undefined,
+        measurements: measurements ?? undefined,
+        note: note.trim() || undefined,
       });
 
       setPhase("saving");
@@ -453,7 +435,7 @@ function BodyCapture({
               <Scanning
                 steps={
                   phase === "measuring"
-                    ? ["骨格を読み取っています", "シルエットを測っています"]
+                    ? ["骨格を読み取っています"]
                     : [
                         "実測値を渡しています",
                         "体型を推定しています",
@@ -475,11 +457,10 @@ function BodyCapture({
                   size="sm"
                 />
                 <Reading
-                  label="ウエスト / 身長"
-                  value={(measurements.waistWidthRatio * 100).toFixed(1)}
+                  label="腰幅 / 身長"
+                  value={(measurements.hipWidthRatio * 100).toFixed(1)}
                   unit="%"
                   size="sm"
-                  tone={measurements.waistMeasured ? "ink" : "warn"}
                 />
                 <Reading
                   label="肩 ÷ 腰"
@@ -490,25 +471,18 @@ function BodyCapture({
               </div>
 
               <p className="mt-3 text-xs leading-relaxed text-muted">
-                写真から測った<strong className="text-ink">幅</strong>を身長で割った値です。
-                割ってあるのでカメラとの距離に左右されず、別の日の写真と
-                そのまま比べられます。痩せたときに先に動くのは
-                <strong className="text-ink">ウエスト</strong>で、肩幅はほとんど変わりません。
+                骨格から測った<strong className="text-ink">幅と長さ</strong>を
+                身長で割った値です。割ってあるのでカメラとの距離に左右されません。
+                出ているのは関節の位置、つまり骨格なので、痩せてもほとんど
+                変わりません。
               </p>
               <p className="mt-2 text-xs leading-relaxed text-muted">
-                絶対値は姿勢・服・立ち位置で動くので、他人の数値やメジャーで
-                測った寸法とは比べられません。見るのは
-                <strong className="text-ink">自分の前回との差</strong>です。
-                この値はそのまま AI に渡していて、写真を目測させるより当てになります。
+                この値は AI に渡していて、体型を「平均的な人」ではなく
+                <strong className="text-ink">あなたの骨格</strong>に合わせて
+                読ませるための基準です。ウエストの太さは骨格では測れないので、
+                そこは AI が写真そのものから判断します。痩せた変化を見るのは
+                <strong className="text-ink">体型の推移</strong>のほうです。
               </p>
-
-              {!measurements.waistMeasured && (
-                <p className="mt-2 text-xs leading-relaxed text-warn">
-                  ウエストの輪郭を読み取れなかったので、腰幅で代用しています
-                  （そのため「肩 ÷ 腰」と釣り合った値になります）。背景が無地で、
-                  体の線が分かる服だと読み取れます。
-                </p>
-              )}
             </div>
           )}
 
