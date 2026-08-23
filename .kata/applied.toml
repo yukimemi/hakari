@@ -1,9 +1,9 @@
 preset = "github.com/yukimemi/pj-presets:web-react-firebase"
-applied_at = "2026-08-23T01:50:22.139546378Z"
+applied_at = "2026-08-23T02:15:04.465359905Z"
 
 [[templates]]
 source = "github.com/yukimemi/pj-base"
-rev = "9775516f16e52842ec875fadfbd899a59baa0c73"
+rev = "62de494e1dc6fa312924f2d9dee80b22fcf8d2ab"
 version = "0.15.0"
 
 [[templates]]
@@ -13,13 +13,13 @@ version = "0.1.0"
 
 [[templates]]
 source = "github.com/yukimemi/pj-react-web"
-rev = "3bd0bc1d67af2189fcefca71b63f4c432d82e387"
-version = "0.1.0"
+rev = "779044a9ecc55ef0d24800ed23ff8c3c2f7140b8"
+version = "0.2.0"
 
 [[templates]]
 source = "github.com/yukimemi/pj-firebase"
-rev = "433acc8c0fe4f41057680fb4a14fd5dcb7992c95"
-version = "0.3.0"
+rev = "6bc26276dd9b0b95cc94edbe37a3379b24834bbe"
+version = "0.4.0"
 
 [files.".agents/skills/renri/SKILL.md"]
 once_applied = true
@@ -40,16 +40,16 @@ content_hash = "6d380d1ecc2f882c2011429d548a6f3c774b74f0c757d884453e4667172acc2a
 content_hash = "d7331ae3c991ee893b97dd182ffeabfc5314798a6c9a8595a4c874b1f9b52ad9"
 
 [files.".github/workflows/claude-review.yml"]
-content_hash = "8d0de0b2e577bd089d18475915f4cd41f2e7af4054b4888a8ddaac58946ee4e8"
+content_hash = "6fa587e82d98ed487b79f42f24eb973d8be675f7842af673c36555ad7bd2ff67"
 
 [files.".github/workflows/claude.yml"]
-content_hash = "86ff51d6d07835c68827801f362d3b2a08b970ec721dde3bbe58df57fcc38c4f"
+content_hash = "5b337df6ef3cb3e8cc6be011c8563403e3968d5dce0285952babc9d4b16876d0"
 
 [files.".github/workflows/deploy.yml"]
 once_applied = true
 
 [files.".github/workflows/kata-apply.yml"]
-content_hash = "2256d160721583ff5b6afe5c9a1778761f7ce6fc5ba46dbe27c9cd7d803a0632"
+content_hash = "d84a852c4416d04837fb2b9c93cd9ebe21fae3457fd469f72b2831d6451817ec"
 
 [files.".gitignore"]
 content_hash = "99ce77ba843c5bee84182b768f18a501f6e76eef3731eb0e899997b33b7c8468"
@@ -59,7 +59,7 @@ content_hash = "8e573305bc9b45b40e4c4c24c0da7728771a12d81c4c1631d6e35f25a189cf84
 once_applied = true
 
 [files."AGENTS.md"]
-content_hash = "be35e1c7a001a98d997214d79e6b3c2024ae53b62912ffd1fd82948724e550d3"
+content_hash = "9d7024253950d2939b4cd39c9b3738c7eaf67c93c520b0763c854ed05769cc7c"
 
 [files."CLAUDE.md"]
 content_hash = "a76b3af252969b8120128d7ce44f2b6cfdcf88c7420ee00675732f542d047529"
@@ -129,16 +129,16 @@ once_applied = true
 once_applied = true
 
 [files."tsconfig.app.json"]
-content_hash = "b1eac9ba6cd1c01d59ebca159805e052c798d9d4ab904680b79ce3e306ea0bbd"
+once_applied = true
 
 [files."tsconfig.json"]
 content_hash = "770b4140bbb581e2dfd9ea9946ffc9c75a1d86ba7d2db5f77c83e37cbdf9d808"
 
 [files."tsconfig.node.json"]
-content_hash = "90a22c920cbc14624fb4658b58f15c875abf3234224f3933f211849c3ada3242"
+once_applied = true
 
 [files."vercel.json"]
-content_hash = "fa66adb9de8a1cb4401b55577ad9fcbb50871cf13fdf692fea217a49d1a76a13"
+content_hash = "5e25595a19964aa0fa0a2ea5bb5bb1a0525557d9a41449ec10dec46f22df820f"
 
 [files."vite.config.ts"]
 once_applied = true
