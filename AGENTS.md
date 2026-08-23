@@ -412,3 +412,162 @@ UI doesn't expose Tailscale-style hosts cleanly. See the
 `reference_firebase_authorized_domains_via_gcloud` memory for
 the exact PATCH call.
 <!-- kata:agents:firebase:end -->
+
+## hakari specifics
+
+Everything above is kata-managed: `kata apply` rewrites the bytes
+between the markers, so repo knowledge belongs **here**, below the last
+`kata:*:end`, where it survives. Setup instructions live in `README.md`
+(Japanese); this section is what an agent needs before editing.
+
+### What this is
+
+A diet-tracking SPA. Photograph a meal and it is logged with kcal/PFC;
+photograph yourself and the silhouette is measured into a 3D body that
+morphs toward the goal weight; a VRM trainer demonstrates the generated
+workout. Vite + React 19 + TS + Tailwind under `src/`, Firebase
+(Auth / Firestore / Storage) for identity and data, `api/` for every LLM
+call across five providers — the provider keys never reach the browser.
+
+### Deployment is Vercel, not Firebase Hosting
+
+The "Firebase Hosting is the primary target" line in the pj-firebase
+block above does **not** hold here. `api/*` are Vercel Functions and
+Hosting cannot run them, so a Hosting deploy would serve a UI whose AI
+features all fail. Production is <https://hakari-two.vercel.app>
+(region `hnd1`), deployed by the Vercel GitHub integration: opening a PR
+builds a preview URL, and merging it to `main` promotes to prod. Nothing
+is deployed by pushing to `main` directly — that is not a route anyone
+takes here (see the git workflow above).
+
+- `.github/workflows/deploy.yml` was deleted on purpose;
+  `[files.".github/workflows/deploy.yml"] once_applied = true` in
+  `.kata/applied.toml` is what stops `kata apply` re-creating it. Do not
+  re-add a Hosting deploy.
+- `firebase.json` / `.firebaserc` stay only so
+  `pnpm exec firebase deploy --only firestore:rules,storage` works.
+- `firestore.rules` / `storage.rules` are no longer the permissive
+  signed-in-only baseline the template describes — they are the real
+  invite gate (below). Never "replace with the project's schema".
+
+### Invariants that span files
+
+Rules files cannot import TypeScript, so a few facts are duplicated by
+hand. Grep before touching any of them.
+
+| Fact | Copies that must agree |
+| --- | --- |
+| Owner address | `shared/access.ts` `OWNER_EMAIL`, `firestore.rules` `owner()`, `storage.rules` `owner()` |
+| Invite list path `config/access` | `shared/access.ts` `ACCESS_DOC`, both rules files |
+| Provider timeout inside function timeout | `PROVIDER_TIMEOUT_MS` (default 280 s, `api/_lib/providers.ts`) must stay under `vercel.json` → `functions."api/*.ts".maxDuration` (300 s) |
+
+The daily AI cap is enforced by the **rules**, not by the server: routes
+increment `users/{uid}/usage/{yyyy-MM-dd}.calls` with the *caller's own*
+token, so a browser can reach the same document. What makes it a limit is
+`match /usage/{date}` — `calls == 1` on create, `calls + 1` on update, no
+delete — together with the `collection != 'usage'` guard in the generic
+`match /{collection}/{document}` block. Firestore rules are OR-ed: drop
+that guard and the generic write rule silently restores unlimited writes
+to the counter, i.e. an uncapped spend. The day boundary is Asia/Tokyo
+(`api/_lib/usage.ts`) because the functions run in UTC.
+
+### `api/` conventions
+
+- **Named method exports, never `export default`.** Vercel's Node
+  runtime reads a default export as `(req, res) => void` and discards the
+  return value, so a Web `Response` vanishes. Write
+  `export const POST = route(async (request) => …)` (`GET` likewise).
+- **Relative imports carry `.js`** — `./_lib/http.js`,
+  `../../shared/access.js`. These files are not bundled; Node ESM
+  resolves the specifier at runtime. Code under `src/` imports
+  extensionless because Vite bundles it. Both forms type-check against
+  the `.ts` source.
+- **Routes are flat.** `vercel.json` matches `api/*.ts` and the dev shim
+  refuses any name outside `/^[a-z0-9-]+$/i`, so no subdirectories —
+  `api/_lib/` is unroutable, which is why shared server code lives there.
+- **Every handler is wrapped in `route(...)`**, in this order: auth
+  (`requireUser`, or `ownerOnly` in `api/clip.ts`), `consumeCall`,
+  `readJson` with a zod schema, then the provider call. Throw
+  `AuthError` / `UsageError` / `ProviderError` / `BadRequest` and let
+  `route()` map the status; anything unrecognised becomes a generic 500
+  so provider internals are not echoed back.
+- Provider fan-out lives in exactly one place: `api/_lib/providers.ts`
+  `complete()`. Feature code never hardcodes a model id — `api/models.ts`
+  proxies each provider's live catalogue and the settings screen picks
+  from it. Task → provider mapping is `shared/providers.ts`.
+- Keep the `/// <reference types="node" />` at the top of
+  `api/_lib/auth.ts`: Vercel type-checks functions with its own tsconfig
+  and loses `process` without it.
+- ID-token verification is `jose` against Google's JWKS, deliberately not
+  `firebase-admin` — that would mean a service-account key in the Vercel
+  env just to check a signature.
+
+### `pnpm dev` is the whole app
+
+`vite-plugin-api.ts` mounts the same `api/` handlers on Vite's dev
+server, so `/api/*` works locally with no Vercel CLI and edits to `api/`
+hot-reload. A route that works in dev but 404s or returns nothing in
+production is almost always one of the two rules above (default export,
+missing `.js`).
+
+### Type-check layout
+
+`pnpm build` runs `tsc -b`, which builds both projects:
+`tsconfig.app.json` (`src` + `shared`, DOM lib) and `tsconfig.node.json`
+(`vite.config.ts`, `vite-plugin-api.ts`, `api`, `shared`, node types).
+`shared/` sits in both, so it must stay free of DOM-only *and* Node-only
+APIs — no `window`, no `process`.
+
+### Tests
+
+`pnpm test` is `vitest run`; specs sit next to the module they cover
+(`shared/calc.test.ts`, `src/avatar/bodyShape.test.ts`,
+`src/data/sanitise.test.ts`, `src/lib/subview.test.tsx`, …). There is no
+`test` block in `vite.config.ts`, so a spec that needs a DOM opts in with
+a `// @vitest-environment jsdom` docblock on line 1. What is covered is
+the arithmetic (`shared/calc.ts`), the body-shape/motion maths
+(`src/avatar/`) and the sanitisers; LLM calls and Firestore are not
+mocked, they are simply not unit-tested.
+
+### Avatar
+
+- Keyframes in `src/avatar/procedural.ts` are written in **VRM 0.x
+  space** (front `−Z`, character's left `−X`). `src/avatar/mannequin.ts`
+  is built in the same space and takes the same `VRMUtils.rotateVRM0`
+  half-turn to face the camera. A VRM 1.0 model faces `+Z`, so it can
+  come out mirrored.
+- `AvatarStage` writes only `rotation.x` per frame. Writing all three
+  axes overwrites that half-turn and the trainer turns its back.
+- Body shape scales bone X/Z only, with an inverse scale on children, so
+  height and limb length never change.
+- The VRM (Alicia Solid, ~7.9 MB) is **not committed** — shipping someone
+  else's model in a public repo is redistribution. `pnpm run avatar`
+  fetches it; without it the capsule mannequin is the fallback, so the
+  app still runs.
+
+### Veo clips (`api/clip.ts`)
+
+Owner-only, on a separate key (`VEO_API_KEY`, falling back to
+`GEMINI_API_KEY`) and a separate counter (`DAILY_CLIP_LIMIT`, default 10)
+so a runaway text loop cannot spend video money. The API is fussy where
+its docs are wrong: `durationSeconds` must be a **number**, and
+`numberOfVideos` / `generateAudio` are rejected by this model. Audio is
+always generated and its safety filter is what actually fails requests —
+keep prompts short and plain. Google's video URLs expire after two days,
+so adopting a clip copies it into Storage `clips/` and records the choice
+in `config/clips`; that bucket needs a CORS config or `<video>` hangs at
+`readyState 0`.
+
+### Language
+
+Comments, commit messages, PR titles and bodies: English. Anything a user
+reads — UI copy, the error strings in `readJson` / `route`, `README.md` —
+Japanese.
+
+### Secrets
+
+Provider keys are server-side only; never give one a `VITE_` prefix, that
+inlines it into the bundle. A value already exported in the shell wins
+over `.env`, which is how this repo's owner runs it. `VITE_FIREBASE_*`
+are public by design — `firestore.rules` / `storage.rules` are the
+protection, not the secrecy of those values.
