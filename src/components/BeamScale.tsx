@@ -14,6 +14,16 @@ type Props = {
   targetKg: number;
   /** Where the current trend lands. Drawn as a ghost tick. */
   projectedKg?: number;
+  /** Tiny caption printed above the needle reading — e.g. "TREND" to
+   *  mark that `currentKg` is a smoothed value, not this morning's raw
+   *  entry. Omit for callers (the sign-in preview) that pass a plain
+   *  number with no averaging behind it. */
+  currentLabel?: string;
+  /** Full explanation behind `currentLabel`, exposed as a native tooltip
+   *  on the needle group and folded into the SVG's aria-label. Anyone who
+   *  already knows never needs to trigger it; the tiny caption is the
+   *  only thing they see. */
+  currentHint?: string;
 };
 
 const WIDTH = 320;
@@ -26,6 +36,8 @@ export default function BeamScale({
   currentKg,
   targetKg,
   projectedKg,
+  currentLabel,
+  currentHint,
 }: Props) {
   // The needle swings in from the start mark on first paint, so opening
   // the app replays the progress made so far.
@@ -70,7 +82,7 @@ export default function BeamScale({
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
       className="w-full"
       role="img"
-      aria-label={`開始 ${startKg.toFixed(1)}kg、現在 ${currentKg.toFixed(1)}kg、目標 ${targetKg.toFixed(1)}kg`}
+      aria-label={`開始 ${startKg.toFixed(1)}kg、現在 ${currentKg.toFixed(1)}kg、目標 ${targetKg.toFixed(1)}kg${currentHint ? `。${currentHint}` : ""}`}
     >
       {/* Travelled portion of the beam */}
       <line
@@ -197,6 +209,7 @@ export default function BeamScale({
           transition: "transform 900ms cubic-bezier(0.22, 1, 0.36, 1)",
         }}
       >
+        {currentHint && <title>{currentHint}</title>}
         <path
           d="M 0 -6 L -5 -16 L 5 -16 Z"
           transform={`translate(0 ${BEAM_Y})`}
@@ -210,6 +223,21 @@ export default function BeamScale({
           stroke={done ? "var(--goal)" : "var(--needle)"}
           strokeWidth={2.5}
         />
+        {currentLabel && (
+          <text
+            x={0}
+            y={BEAM_Y - 34}
+            textAnchor="middle"
+            fontSize={6.5}
+            fontWeight={600}
+            letterSpacing="0.08em"
+            fill="var(--muted)"
+            opacity={0.65}
+            style={{ fontFamily: '"Archivo", "Segoe UI", system-ui, sans-serif' }}
+          >
+            {currentLabel}
+          </text>
+        )}
         <text
           x={0}
           y={BEAM_Y - 22}

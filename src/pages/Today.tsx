@@ -84,6 +84,8 @@ export default function Today() {
           currentKg={currentKg}
           targetKg={goal.targetWeightKg}
           projectedKg={undefined}
+          currentLabel="TREND"
+          currentHint="直近の変動をならした体重の7日移動平均です。今日記録した値そのものではありません。"
         />
         <div className="mt-2 grid grid-cols-3 gap-2 border-t border-rule/60 pt-3">
           <Reading
