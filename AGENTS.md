@@ -454,6 +454,16 @@ do not resemble their cause:
   Vercel CLI leaves the local loop. Note that it also masks both
   mistakes above, since Vite bundles and invokes the handler
   directly.
+- **`vercel.json` is co-owned, and the SPA rewrite is the half
+  that bites.** kata syncs `$schema`, `buildCommand`,
+  `outputDirectory`, `framework`, `rewrites` and `headers`
+  (`merge-json`, so only those keys). The shipped rewrite
+  excludes the whole `/api` boundary —
+  `/((?!api(?:/|$)).*)` — because a catch-all answers every
+  function route with `index.html`: a green deploy whose whole
+  API is gone. `regions`, `functions` (a
+  `maxDuration` raised for slow LLM calls, say) and anything
+  else the project adds are the project's, and survive applies.
 
 ### Rules
 

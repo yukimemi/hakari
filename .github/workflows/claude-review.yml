@@ -143,7 +143,7 @@ jobs:
           # (anthropics/claude-code-action#1236). The App token the
           # action exchanges covers API calls, not that first fetch.
 
-      - uses: anthropics/claude-code-action@v1
+      - uses: anthropics/claude-code-action@v1.0.195
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Tracking comment with progress checkboxes; also pulls
