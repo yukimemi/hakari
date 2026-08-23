@@ -1,14 +1,14 @@
 preset = "github.com/yukimemi/pj-presets:web-react-firebase"
-applied_at = "2026-08-20T23:08:14.4511439Z"
+applied_at = "2026-08-23T01:50:22.139546378Z"
 
 [[templates]]
 source = "github.com/yukimemi/pj-base"
-rev = "27e4c1fe27ce44731a04bf0d55590fa6a0db27d4"
-version = "0.14.0"
+rev = "9775516f16e52842ec875fadfbd899a59baa0c73"
+version = "0.15.0"
 
 [[templates]]
 source = "github.com/yukimemi/pj-pnpm"
-rev = "647e974cb1a5312dde18ce1529c8957a4573d8a5"
+rev = "73b6cb62279636896781f781a91aeccb576f10fb"
 version = "0.1.0"
 
 [[templates]]
@@ -18,8 +18,8 @@ version = "0.1.0"
 
 [[templates]]
 source = "github.com/yukimemi/pj-firebase"
-rev = "c74ef488edf4351af2f5cab567a59ffbdd8de8f6"
-version = "0.2.0"
+rev = "433acc8c0fe4f41057680fb4a14fd5dcb7992c95"
+version = "0.3.0"
 
 [files.".agents/skills/renri/SKILL.md"]
 once_applied = true
@@ -55,11 +55,11 @@ content_hash = "2256d160721583ff5b6afe5c9a1778761f7ce6fc5ba46dbe27c9cd7d803a0632
 content_hash = "99ce77ba843c5bee84182b768f18a501f6e76eef3731eb0e899997b33b7c8468"
 
 [files.".kata/vars.toml"]
-content_hash = "393b2b94540e792790ef9357e46e5bc259eb3064605794ca2373ae458999cb23"
+content_hash = "8e573305bc9b45b40e4c4c24c0da7728771a12d81c4c1631d6e35f25a189cf84"
 once_applied = true
 
 [files."AGENTS.md"]
-content_hash = "cc0e57a7d14b7b77eed3795aec832bb9adace50b26936445df0b2107237f7b93"
+content_hash = "be35e1c7a001a98d997214d79e6b3c2024ae53b62912ffd1fd82948724e550d3"
 
 [files."CLAUDE.md"]
 content_hash = "a76b3af252969b8120128d7ce44f2b6cfdcf88c7420ee00675732f542d047529"
