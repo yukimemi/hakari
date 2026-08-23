@@ -1,9 +1,9 @@
 preset = "github.com/yukimemi/pj-presets:web-react-firebase"
-applied_at = "2026-08-23T03:36:52.467429689Z"
+applied_at = "2026-08-23T06:27:18.4701962Z"
 
 [[templates]]
 source = "github.com/yukimemi/pj-base"
-rev = "0424dfa03771babdeca3c22f08fe003f2811f820"
+rev = "c2fb1a99fb3b4beeef6d2411d7f669ea132b0a79"
 version = "0.16.0"
 
 [[templates]]
@@ -40,13 +40,13 @@ content_hash = "6d380d1ecc2f882c2011429d548a6f3c774b74f0c757d884453e4667172acc2a
 content_hash = "85b195e27232805149919455cf3e9906cec9e5c5d82c1b0e9c668db355844ed1"
 
 [files.".github/workflows/ci.yml"]
-content_hash = "a6c65f0871ce58f3b82394fc0e3e0d603b557c83c5d7d661b968244c7ef32198"
+content_hash = "134e21e0e1ed723f5213150d8718b654b597c59ec97655415e815303aee09e9c"
 
 [files.".github/workflows/claude-review.yml"]
 content_hash = "22c6ccac0b6b0e97a09eb70343f8caf6a874ddd61d0cdb8601350905d0c51ec4"
 
 [files.".github/workflows/claude.yml"]
-content_hash = "408745380186001ef0af9dfe00c47f0966fb55d16d196bfc7a46dd01ddb9a8a2"
+content_hash = "4710bc6e843692e48a3031f89e2407853b623c536ff25366295d30df3c7e7b20"
 
 [files.".github/workflows/deploy.yml"]
 once_applied = true
