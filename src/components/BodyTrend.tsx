@@ -3,16 +3,32 @@
 // The flipbook next door shows the change; this shows whether it is
 // moving in the right direction, in numbers you can read at a glance.
 //
-// What is plotted is deliberately not the measurement ratios. Those come
-// from pose landmarks — joint centres — so they describe a skeleton and
-// barely budge as fat comes off; charting them would draw a flat line and
-// call it a plateau. The body-fat read from the analysis does move, and
-// the weight recorded beside each photo gives it context.
+// Two series, two axes, and both come from the model rather than from
+// measurement. That is deliberate: the pose landmarks the photo step does
+// measure are joint centres, so they describe a skeleton and barely budge
+// as fat comes off — charting them would draw a flat line and call it a
+// plateau.
 //
-// A photo-derived body-fat number is an estimate with real spread, so a
-// single step is inside the noise. Two guards against over-reading it:
-// the caption says so outright, and "開始から" is shown next to "前回から"
-// so a one-shot wobble is visible against the longer run.
+// Waist is the circumference in cm, not `shape.waist`. `shape.waist` is an
+// offset against the average for a given height and weight, so someone who
+// loses 10kg while staying the same proportions keeps the same value — a
+// flat line while the waist is visibly shrinking. Only an absolute number
+// can be read as "smaller than last month".
+//
+// Both numbers are estimates from a photo, with real spread: two analyses
+// of the same body on the same day have come back 3 points apart on body
+// fat. Three guards against over-reading a single step: the caption says
+// so, "開始から" sits next to "前回から" so one wobble is visible against
+// the longer run, and the weight that would tempt a spurious correlation
+// is left on the weight screen where it has a proper chart.
+//
+// The waist estimate is also not independent of the weight log, which is
+// worth knowing before reading a drop as belly fat: submitting the same
+// photo with the recorded weight changed from 86.3kg to 70kg moved the
+// answer from 103cm to 90cm on deepseek's vision model. Instructing the
+// model in the system prompt not to back-calculate from BMI did not stop
+// it. Hence the second caption paragraph — a number that moves with the
+// weight you typed cannot corroborate the weight you typed.
 
 import { useMemo } from "react";
 import {
@@ -25,7 +41,6 @@ import {
   YAxis,
 } from "recharts";
 import { Empty, Panel, Reading } from "./ui";
-import { formatKg } from "../lib/format";
 import type { BodyPhotoRecord } from "../data/store";
 
 /** Signed, with a typographic minus so it lines up with the other
@@ -33,6 +48,14 @@ import type { BodyPhotoRecord } from "../data/store";
 function signed(value: number, digits = 1): string {
   const sign = value > 0 ? "+" : value < 0 ? "−" : "±";
   return `${sign}${Math.abs(value).toFixed(digits)}`;
+}
+
+/** Down is progress for both series here, so one comparator serves both.
+ *  Equal values are muted rather than green — nothing moved. */
+function trendTone(latest: number, before: number): "goal" | "needle" | "muted" {
+  if (latest < before) return "goal";
+  if (latest > before) return "needle";
+  return "muted";
 }
 
 export default function BodyTrend({ photos }: { photos: BodyPhotoRecord[] }) {
@@ -48,65 +71,114 @@ export default function BodyTrend({ photos }: { photos: BodyPhotoRecord[] }) {
         .map((photo) => ({
           label: photo.date.slice(5).replace("-", "/"),
           fat: photo.analysis!.estimatedBodyFatPct,
-          kg: photo.weightKg,
+          // Absent on analyses stored before the field existed. Left
+          // undefined so the line starts where the data does instead of
+          // dropping to zero.
+          waist: photo.analysis!.estimatedWaistCm,
         })),
     [photos],
+  );
+
+  // Every waist reading, in order. The waist line is younger than the
+  // history, so its "前回" is the previous photo that has one — not
+  // necessarily the previous photo.
+  const waists = useMemo(
+    () =>
+      points
+        .map((point) => point.waist)
+        .filter((value): value is number => typeof value === "number"),
+    [points],
   );
 
   if (points.length === 0) {
     return (
       <Panel title="体型の推移">
         <Empty title="まだ比べられません">
-          写真を解析すると、そのときの推定体脂肪率が記録されます。
+          写真を解析すると、そのときの推定ウエストと推定体脂肪率が記録されます。
           2枚目からここに推移が出ます。
         </Empty>
       </Panel>
     );
   }
 
-  const latest = points.at(-1)!;
-  const previous = points.at(-2);
-  const first = points[0]!;
-  const hasWeight = points.some((point) => point.kg !== undefined);
+  const fatLatest = points.at(-1)!.fat;
+  const fatPrevious = points.at(-2)?.fat;
+  const fatFirst = points[0]!.fat;
+  const waistLatest = waists.at(-1);
+  const waistPrevious = waists.at(-2);
+  const waistFirst = waists[0];
 
   return (
     <Panel title="体型の推移">
+      <div className="grid grid-cols-3 gap-2 pb-3">
+        <Reading
+          label="推定ウエスト"
+          value={waistLatest === undefined ? "—" : waistLatest.toFixed(1)}
+          unit={waistLatest === undefined ? undefined : "cm"}
+          size="sm"
+        />
+        <Reading
+          label="前回から"
+          value={
+            waistLatest === undefined || waistPrevious === undefined
+              ? "—"
+              : signed(waistLatest - waistPrevious)
+          }
+          unit={
+            waistLatest === undefined || waistPrevious === undefined
+              ? undefined
+              : "cm"
+          }
+          size="sm"
+          tone={
+            waistLatest === undefined || waistPrevious === undefined
+              ? "muted"
+              : trendTone(waistLatest, waistPrevious)
+          }
+        />
+        <Reading
+          label="開始から"
+          value={
+            waistLatest === undefined ||
+            waistFirst === undefined ||
+            waists.length < 2
+              ? "—"
+              : signed(waistLatest - waistFirst)
+          }
+          unit={waists.length < 2 ? undefined : "cm"}
+          size="sm"
+          tone={
+            waistLatest === undefined ||
+            waistFirst === undefined ||
+            waists.length < 2
+              ? "muted"
+              : trendTone(waistLatest, waistFirst)
+          }
+        />
+      </div>
+
       <div className="grid grid-cols-3 gap-2 pb-4">
         <Reading
-          label="最新の推定体脂肪率"
-          value={latest.fat.toFixed(1)}
+          label="推定体脂肪率"
+          value={fatLatest.toFixed(1)}
           unit="%"
           size="sm"
         />
         <Reading
           label="前回から"
-          value={previous ? signed(latest.fat - previous.fat) : "—"}
-          unit={previous ? "pt" : undefined}
+          value={fatPrevious === undefined ? "—" : signed(fatLatest - fatPrevious)}
+          unit={fatPrevious === undefined ? undefined : "pt"}
           size="sm"
           tone={
-            !previous
-              ? "muted"
-              : latest.fat < previous.fat
-                ? "goal"
-                : latest.fat > previous.fat
-                  ? "needle"
-                  : "muted"
+            fatPrevious === undefined ? "muted" : trendTone(fatLatest, fatPrevious)
           }
         />
         <Reading
           label="開始から"
-          value={points.length > 1 ? signed(latest.fat - first.fat) : "—"}
-          unit={points.length > 1 ? "pt" : undefined}
+          value={points.length < 2 ? "—" : signed(fatLatest - fatFirst)}
+          unit={points.length < 2 ? undefined : "pt"}
           size="sm"
-          tone={
-            points.length < 2
-              ? "muted"
-              : latest.fat < first.fat
-                ? "goal"
-                : latest.fat > first.fat
-                  ? "needle"
-                  : "muted"
-          }
+          tone={points.length < 2 ? "muted" : trendTone(fatLatest, fatFirst)}
         />
       </div>
 
@@ -142,11 +214,11 @@ export default function BodyTrend({ photos }: { photos: BodyPhotoRecord[] }) {
                 width={44}
                 tickFormatter={(v: number) => v.toFixed(0)}
               />
-              {hasWeight && (
+              {waists.length > 0 && (
                 <YAxis
-                  yAxisId="kg"
+                  yAxisId="waist"
                   orientation="right"
-                  domain={["dataMin - 1", "dataMax + 1"]}
+                  domain={["dataMin - 2", "dataMax + 2"]}
                   tick={{ fontSize: 10, fill: "var(--muted)" }}
                   tickLine={false}
                   axisLine={false}
@@ -164,46 +236,73 @@ export default function BodyTrend({ photos }: { photos: BodyPhotoRecord[] }) {
                 }}
                 labelStyle={{ color: "var(--muted)" }}
                 formatter={(value, name) =>
-                  name === "kg"
-                    ? [`${formatKg(Number(value))} kg`, "体重"]
+                  name === "waist"
+                    ? [`${Number(value).toFixed(1)} cm`, "推定ウエスト"]
                     : [`${Number(value).toFixed(1)} %`, "推定体脂肪率"]
                 }
               />
-              {hasWeight && (
-                <Line
-                  yAxisId="kg"
-                  type="monotone"
-                  dataKey="kg"
-                  stroke="var(--chart-raw)"
-                  strokeWidth={1.5}
-                  dot={{ r: 2, fill: "var(--chart-raw)", strokeWidth: 0 }}
-                  activeDot={{ r: 4 }}
-                  isAnimationActive={false}
-                  connectNulls
-                />
-              )}
               <Line
                 yAxisId="fat"
                 type="monotone"
                 dataKey="fat"
-                stroke="var(--chart-trend)"
-                strokeWidth={2}
-                dot={{ r: 2.5, fill: "var(--chart-trend)", strokeWidth: 0 }}
+                stroke="var(--chart-raw)"
+                strokeWidth={1.5}
+                dot={{ r: 2, fill: "var(--chart-raw)", strokeWidth: 0 }}
                 activeDot={{ r: 4 }}
                 isAnimationActive={false}
               />
+              {waists.length > 0 && (
+                <Line
+                  yAxisId="waist"
+                  type="monotone"
+                  dataKey="waist"
+                  stroke="var(--chart-trend)"
+                  strokeWidth={2}
+                  dot={{ r: 2.5, fill: "var(--chart-trend)", strokeWidth: 0 }}
+                  activeDot={{ r: 4 }}
+                  isAnimationActive={false}
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         </div>
       )}
 
-      <p className="mt-3 text-xs leading-relaxed text-muted">
-        赤い線が<strong className="text-ink">推定体脂肪率</strong>
-        {hasWeight && "、灰色が同じ日の体重"}です。体脂肪率は写真からの
-        AI 推定なので、1回ぶんの上下は誤差の範囲です。見るのは
-        <strong className="text-ink">向き</strong>で、
-        同じ場所・同じ明るさ・同じ服で撮るほど当てになります。
-      </p>
+      {/* Describes the chart, so it only appears when there is one — and
+          only names the waist line when that line is actually drawn. */}
+      {points.length > 1 && (
+        <p className="mt-3 text-xs leading-relaxed text-muted">
+          {waists.length > 0 ? (
+            <>
+              赤い線が<strong className="text-ink">推定ウエスト</strong>
+              、灰色が推定体脂肪率です。どちらも写真からの AI 推定なので、
+            </>
+          ) : (
+            <>
+              灰色の線が<strong className="text-ink">推定体脂肪率</strong>
+              です。写真からの AI 推定なので、
+            </>
+          )}
+          1回ぶんの上下は誤差の範囲です。見るのは
+          <strong className="text-ink">向き</strong>で、
+          同じ場所・同じ明るさ・同じ服で撮るほど当てになります。
+        </p>
+      )}
+      {waists.length > 0 && (
+        <p className="mt-2 text-xs leading-relaxed text-muted">
+          推定ウエストはメジャーで測った寸法とは一致しません。写真だけでなく
+          <strong className="text-ink">記録した体重にも引っぱられます</strong>。
+          同じ写真で体重の記録だけを変えると推定ウエストも動くので、体重とは
+          独立した証拠として読まないでください。実寸を知りたいときはメジャーが
+          確実です。
+        </p>
+      )}
+      {waists.length === 0 && (
+        <p className="mt-2 text-xs leading-relaxed text-muted">
+          ウエストの推定は今より前の解析には入っていないので、次に撮った写真から
+          記録されます。
+        </p>
+      )}
     </Panel>
   );
 }

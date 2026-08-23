@@ -147,12 +147,19 @@ export default function Body() {
 
       {analysis && (
         <Panel title="読み取り結果">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <Reading label="体型タイプ" value={analysis.bodyType} size="sm" />
             <Reading
               label="推定体脂肪率"
               value={analysis.estimatedBodyFatPct.toFixed(1)}
               unit="%"
+              size="sm"
+            />
+            {/* Absent on analyses stored before this field existed. */}
+            <Reading
+              label="推定ウエスト"
+              value={analysis.estimatedWaistCm?.toFixed(1) ?? "—"}
+              unit={analysis.estimatedWaistCm === undefined ? undefined : "cm"}
               size="sm"
             />
           </div>

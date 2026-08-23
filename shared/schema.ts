@@ -146,6 +146,13 @@ export const BodyAnalysis = z.object({
   estimatedBodyFatPct: z
     .number()
     .describe("見た目からの推定体脂肪率 (%)。あくまで概算"),
+  /** Absolute, unlike `shape.waist` — which is an offset against the
+   *  average for a given height and weight, and so stays put when someone
+   *  loses weight without changing proportions. A circumference in cm is
+   *  what can be charted as "the waist got smaller". */
+  estimatedWaistCm: z
+    .number()
+    .describe("へその高さのウエスト周囲長の推定 (cm)。あくまで概算"),
   shape: BodyShape,
   focusAreas: z
     .array(z.string())
