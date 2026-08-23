@@ -1,3 +1,4 @@
+
 # kata-managed — source: yukimemi/pj-pnpm/.github/workflows/ci.yml.tera
 # Local edits are reverted on the next `kata apply`. Push fixes upstream.
 name: CI

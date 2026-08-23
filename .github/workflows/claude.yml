@@ -21,6 +21,21 @@ name: claude
 #
 # `when = "always"` (in template.toml): every consumer wants the
 # same responder; fixes to the workflow flow automatically.
+#
+# No `pull_request_review` trigger, and the reason is a merge
+# blocker masquerading as a responder that did not fire. Replying
+# to an inline review comment — `/pulls/{n}/comments/{id}/replies`,
+# which is exactly the AGENTS.md "reply to reviewers in each
+# thread" convention — makes GitHub create a NEW review whose
+# summary body is EMPTY and fires `pull_request_review` with
+# `review.body == ""`. The `@claude` sits in the comment, not the
+# summary, so the job's condition cannot see it; the job skips,
+# and a SKIPPED check run named "claude" then blocks the merge
+# under branch protection until an admin bypasses it. Observed on
+# yukimemi/hakari#18. In-thread replies are already caught by
+# `pull_request_review_comment` above, so dropping the review event
+# loses nothing for that flow. The only loss is an `@claude` placed
+# in a review *summary*, which is not a documented pattern.
 
 on:
   issue_comment:
@@ -29,8 +44,6 @@ on:
     types: [created]
   issues:
     types: [opened, assigned]
-  pull_request_review:
-    types: [submitted]
 
 permissions:
   # contents/pull-requests/issues write: Claude may push fix
@@ -73,12 +86,10 @@ jobs:
     if: |
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
                github.event.comment.author_association ||
-               github.event.review.author_association ||
                github.event.issue.author_association) &&
       (
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
         (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
         (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
       )
     runs-on: ubuntu-latest
