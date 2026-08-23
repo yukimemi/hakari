@@ -7,7 +7,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useUid } from "../auth/context";
 import { useBodyPhotos, useSettings, useUserDoc, useWeights } from "../data/hooks";
-import { saveBodyPhoto, saveUserSlice, uploadPhoto } from "../data/store";
+import {
+  deleteBodyPhoto,
+  saveBodyPhoto,
+  saveUserSlice,
+  saveWeight,
+  updateBodyPhoto,
+  uploadPhoto,
+} from "../data/store";
 import AvatarStage from "../avatar/AvatarStage";
 import Scanning from "../components/Scanning";
 import PhotoFilm from "../components/PhotoFilm";
@@ -19,6 +26,7 @@ import {
   Alert,
   Button,
   Field,
+  NumberInput,
   Panel,
   Reading,
   TextInput,
@@ -46,7 +54,12 @@ export default function Body() {
 
   const profile = user.profile!;
   const goal = user.goal!;
+  // The latest reading, which is not the same thing as today's. The
+  // avatar, the analysis and the number stamped onto a photo all hang off
+  // this one value, so which day it was taken on is part of the reading.
   const currentKg = weights.at(-1)?.weightKg ?? goal.startWeightKg;
+  const weighedOn = weights.at(-1)?.date;
+  const today = todayKey();
 
   // Until a photo has been analysed the avatar is still shaped by real
   // data — BMI — rather than being a default mannequin.
@@ -128,7 +141,10 @@ export default function Body() {
             aria-label="現在の体型から目標体型へ"
           />
           <div className="flex justify-between text-xs text-muted">
-            <span>今 {formatKg(currentKg)}kg</span>
+            <span>
+              今 {formatKg(currentKg)}kg
+              <span className="ml-1">{weighedOnLabel(weighedOn, today)}</span>
+            </span>
             <span>目標 {formatKg(goal.targetWeightKg)}kg</span>
           </div>
           <p className="mt-2 text-xs leading-relaxed text-muted">
@@ -176,6 +192,9 @@ export default function Body() {
       <BodyCapture
         heightCm={profile.heightCm}
         weightKg={currentKg}
+        weighedOn={weighedOn}
+        today={today}
+        onWeighIn={(weightKg) => saveWeight(uid, { date: today, weightKg })}
         sex={profile.sex}
         age={ageFrom(profile.birthYear)}
         assignment={settings.ai.body}
@@ -193,14 +212,64 @@ export default function Body() {
         uploadPhoto={(blob, name) => uploadPhoto(uid, "body", blob, name)}
       />
 
-      {photos.length > 0 && <PhotoFilm photos={photos} />}
+      {photos.length > 0 && (
+        <PhotoFilm
+          photos={photos}
+          onSave={async (photo, patch) => {
+            await updateBodyPhoto(uid, photo.id, patch);
+            // The read-out names the day its photo was taken, so a
+            // corrected date has to travel with it.
+            if (analysis?.photoPath === photo.photoPath && patch.date !== photo.date) {
+              await saveUserSlice(uid, { body: { ...analysis, analyzedAt: patch.date } });
+            }
+          }}
+          onDelete={async (photo) => {
+            await deleteBodyPhoto(uid, photo);
+            // Deleting the photo a read-out came from has to take the
+            // read-out with it, or the panel above keeps quoting a
+            // picture that is no longer there. The most recent of the
+            // photos left standing takes over.
+            if (analysis?.photoPath !== photo.photoPath) return;
+            const previous = photos
+              .filter((p) => p.id !== photo.id && p.analysis)
+              .at(-1);
+            await saveUserSlice(uid, {
+              body: previous?.analysis
+                ? {
+                    ...previous.analysis,
+                    photoPath: previous.photoPath,
+                    analyzedAt: previous.date,
+                  }
+                : undefined,
+            });
+          }}
+        />
+      )}
     </>
   );
+}
+
+/** "2026-08-20" → "08/20". The year is noise on a screen where every
+ *  reading in play is from the last few weeks. */
+function monthDay(date: string): string {
+  return date.slice(5).replace("-", "/");
+}
+
+/** Where the weight on this screen came from. A reading taken four days
+ *  ago is not wrong, but the screen must not let it pass for this
+ *  morning's. */
+function weighedOnLabel(weighedOn: string | undefined, today: string): string {
+  if (!weighedOn) return "（開始時の値）";
+  if (weighedOn === today) return "（今日）";
+  return `（${monthDay(weighedOn)} の記録）`;
 }
 
 function BodyCapture({
   heightCm,
   weightKg,
+  weighedOn,
+  today,
+  onWeighIn,
   sex,
   age,
   assignment,
@@ -209,6 +278,11 @@ function BodyCapture({
 }: {
   heightCm: number;
   weightKg: number;
+  /** The day `weightKg` was measured, or nothing when there is no reading
+   *  at all and the goal's starting weight is standing in for one. */
+  weighedOn?: string;
+  today: string;
+  onWeighIn: (weightKg: number) => Promise<void>;
   sex: "male" | "female";
   age: number;
   assignment: { provider: import("../../shared/providers").ProviderId; model?: string };
@@ -323,6 +397,15 @@ function BodyCapture({
 
   return (
     <Panel title="写真から読み取る">
+      {/* The weight is not decoration here: it goes into the prompt and is
+          stamped onto the saved record, so a photo analysed before the
+          morning weigh-in keeps the older number for good. */}
+      <WeighIn
+        weightKg={weightKg}
+        weighedOn={weighedOn}
+        today={today}
+        onSave={onWeighIn}
+      />
       <input
         ref={fileRef}
         type="file"
@@ -458,5 +541,82 @@ function BodyCapture({
         </div>
       )}
     </Panel>
+  );
+}
+
+/** Today's weigh-in, offered where it matters. Analysing a photo reads the
+ *  latest weight and stamps it onto the record it saves, and neither the
+ *  reading nor the stamp is revisited afterwards — so the order genuinely
+ *  matters, and this is the screen that has to say so. */
+function WeighIn({
+  weightKg,
+  weighedOn,
+  today,
+  onSave,
+}: {
+  weightKg: number;
+  weighedOn?: string;
+  today: string;
+  onSave: (weightKg: number) => Promise<void>;
+}) {
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const kg = Number(value);
+    if (!kg) {
+      setError("体重を入力してください");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await onSave(kg);
+      setValue("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存に失敗しました");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (weighedOn === today) {
+    return (
+      <p className="mb-3 text-xs text-muted">
+        今日の{" "}
+        <strong className="reading text-ink">{formatKg(weightKg)}kg</strong>{" "}
+        で解析します。
+      </p>
+    );
+  }
+
+  return (
+    <div className="mb-3 space-y-2">
+      <Alert tone="warn">
+        今日の体重がまだ記録されていません。このまま解析すると
+        {weighedOn
+          ? `${monthDay(weighedOn)} の ${formatKg(weightKg)}kg`
+          : `開始時の ${formatKg(weightKg)}kg`}
+        を使い、その値が写真にも残ります。
+      </Alert>
+      <form onSubmit={submit} className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <NumberInput
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            step="0.1"
+            suffix="kg"
+            placeholder="78.0"
+            aria-label="今日の体重"
+          />
+        </div>
+        <Button type="submit" variant="primary" loading={busy}>
+          記録する
+        </Button>
+      </form>
+      {error && <Alert tone="error">{error}</Alert>}
+    </div>
   );
 }

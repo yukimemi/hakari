@@ -19,8 +19,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { photoUrl, type BodyPhotoRecord } from "../data/store";
-import { Button, Panel } from "./ui";
+import { Alert, Button, Field, NumberInput, Panel, TextInput } from "./ui";
 import { formatKg } from "../lib/format";
+import { todayKey } from "../../shared/calc";
 
 /** Milliseconds per frame. Slow enough to read the date at the top, fast
  *  enough that thirty days is not a sit-down. */
@@ -39,19 +40,41 @@ function daysBetween(from: string, to: string): number {
   return Math.round(ms / 86_400_000);
 }
 
-export default function PhotoFilm({ photos }: { photos: BodyPhotoRecord[] }) {
+export default function PhotoFilm({
+  photos,
+  onSave,
+  onDelete,
+}: {
+  photos: BodyPhotoRecord[];
+  onSave: (
+    photo: BodyPhotoRecord,
+    patch: { date: string; weightKg?: number },
+  ) => Promise<void>;
+  onDelete: (photo: BodyPhotoRecord) => Promise<void>;
+}) {
+  // The cursor is a photo, not a position. A corrected date reorders the
+  // list and a deleted photo shortens it; an index would quietly come to
+  // mean a different day in both cases, where an id that is no longer
+  // there falls back to the same place `null` does.
+  //
   // `null` means "the newest one", which is both the right thing to open
   // on and the right thing to do when a photo is added while this is
   // showing. Resolved on read, so there is never a render where the
   // cursor points past the end of a list that has just changed.
-  const [cursor, setCursor] = useState<number | null>(null);
+  const [cursorId, setCursorId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [ready, setReady] = useState<Record<string, boolean>>({});
+  // Null while not editing, seeded from the record on entry rather than
+  // held in sync with it — the meal card's shape, so a half-typed
+  // correction is not overwritten by the snapshot it came from.
+  const [editing, setEditing] = useState<BodyPhotoRecord | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
-  const index =
-    cursor === null ? photos.length - 1 : Math.min(cursor, photos.length - 1);
+  const found = cursorId === null ? -1 : photos.findIndex((p) => p.id === cursorId);
+  const index = found === -1 ? photos.length - 1 : found;
+  const seek = (to: number) => setCursorId(photos[to]?.id ?? null);
 
   // Storage URLs are signed and time-limited, so they are fetched per
   // view rather than stored alongside the record.
@@ -108,21 +131,78 @@ export default function PhotoFilm({ photos }: { photos: BodyPhotoRecord[] }) {
       // Wait rather than skip. The frame that has not arrived is as much
       // a part of the change as the ones that have.
       if (!loaded[photos[at + 1]?.id ?? ""]) return;
-      setCursor(at + 1);
+      setCursorId(photos[at + 1].id);
     }, SPEEDS[speed].ms);
     return () => clearInterval(id);
   }, [playing, speed, photos]);
 
   const play = () => {
     // Starting from the end would show one frame and stop.
-    if (index >= photos.length - 1) setCursor(0);
+    if (index >= photos.length - 1) seek(0);
     setPlaying(true);
   };
 
+  const remove = async () => {
+    if (!current) return;
+    setConfirming(false);
+    setPlaying(false);
+    await onDelete(current);
+  };
+
+  // Both panels below carry the same pair, so the film and the single
+  // photo that cannot be played yet are corrected the same way.
+  const actions = !current || editing ? null : confirming ? (
+    <div className="flex gap-2">
+      <Button variant="danger" className="!px-2" onClick={remove}>
+        消す
+      </Button>
+      <Button className="!px-2" onClick={() => setConfirming(false)}>
+        やめる
+      </Button>
+    </div>
+  ) : (
+    <div className="flex gap-2">
+      <Button
+        className="!px-2"
+        onClick={() => {
+          setPlaying(false);
+          setConfirming(false);
+          setEditing(current);
+        }}
+      >
+        編集
+      </Button>
+      {/* Two steps, as on the meal card and the weight log: the button
+          sits next to one people mean to press. */}
+      <Button
+        className="!px-2"
+        onClick={() => {
+          setPlaying(false);
+          setConfirming(true);
+        }}
+      >
+        削除
+      </Button>
+    </div>
+  );
+
+  const editForm = editing && (
+    <PhotoEdit
+      key={editing.id}
+      photo={editing}
+      onSave={async (patch) => {
+        await onSave(editing, patch);
+        setEditing(null);
+      }}
+      onCancel={() => setEditing(null)}
+    />
+  );
+
   if (photos.length < 2) {
     return (
-      <Panel title="記録した写真">
-        <Strip photos={photos} urls={urls} index={index} onSeek={setCursor} />
+      <Panel title="記録した写真" action={actions}>
+        {editForm}
+        <Strip photos={photos} urls={urls} index={index} onSeek={seek} />
         <p className="mt-3 text-xs text-muted">
           同じ場所・同じポーズでもう一枚撮ると、変化を再生できます。
         </p>
@@ -135,7 +215,8 @@ export default function PhotoFilm({ photos }: { photos: BodyPhotoRecord[] }) {
     current?.weightKg && first?.weightKg ? first.weightKg - current.weightKg : null;
 
   return (
-    <Panel title="変化を見る">
+    <Panel title="変化を見る" action={actions}>
+      {editForm}
       <div className="relative overflow-hidden rounded-lg border border-rule/60 bg-sunk">
         {/* `object-contain`, not cover: photos taken on different days are
             framed slightly differently, and cropping each one to fill the
@@ -199,7 +280,7 @@ export default function PhotoFilm({ photos }: { photos: BodyPhotoRecord[] }) {
           aria-label="日付をたどる"
           onChange={(e) => {
             setPlaying(false);
-            setCursor(Number(e.target.value));
+            seek(Number(e.target.value));
           }}
           className="min-w-0 flex-1 accent-[color:var(--needle)]"
         />
@@ -229,11 +310,87 @@ export default function PhotoFilm({ photos }: { photos: BodyPhotoRecord[] }) {
           index={index}
           onSeek={(i) => {
             setPlaying(false);
-            setCursor(i);
+            seek(i);
           }}
         />
       </div>
     </Panel>
+  );
+}
+
+/** Correcting one record. The photo and the model's reading of it are left
+ *  alone: what a person knows better than the record is which day it was
+ *  and what they weighed that morning — the number that gets stamped on
+ *  before the analysis and never revisited. */
+function PhotoEdit({
+  photo,
+  onSave,
+  onCancel,
+}: {
+  photo: BodyPhotoRecord;
+  onSave: (patch: { date: string; weightKg?: number }) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [date, setDate] = useState(photo.date);
+  const [weightKg, setWeightKg] = useState(
+    photo.weightKg === undefined ? "" : String(photo.weightKg),
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!date) {
+      setError("日付を入れてください");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await onSave({ date, weightKg: weightKg ? Number(weightKg) : undefined });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存に失敗しました");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={submit}
+      className="mb-4 space-y-3 rounded-lg border border-rule/60 bg-sunk p-3"
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="日付">
+          <TextInput
+            type="date"
+            value={date}
+            max={todayKey()}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </Field>
+        <Field label="体重" hint="空にすると消えます">
+          <NumberInput
+            value={weightKg}
+            onChange={(e) => setWeightKg(e.target.value)}
+            step="0.1"
+            suffix="kg"
+            placeholder="78.0"
+          />
+        </Field>
+      </div>
+      <p className="text-xs leading-relaxed text-muted">
+        写真と読み取り結果はそのままです。撮ってから量った体重は、ここで入れ直せます。
+      </p>
+      {error && <Alert tone="error">{error}</Alert>}
+      <div className="flex gap-2">
+        <Button type="submit" variant="primary" loading={busy}>
+          保存
+        </Button>
+        <Button type="button" onClick={onCancel}>
+          やめる
+        </Button>
+      </div>
+    </form>
   );
 }
 
