@@ -21,6 +21,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
   where,
   type Timestamp,
   type Unsubscribe,
@@ -395,6 +396,22 @@ export async function saveBodyPhoto(
     createdAt: serverTimestamp(),
   });
   return target.id;
+}
+
+/** Corrects a stored record. The photo and the reading the model made
+ *  from it stay as they were: the two things a person knows better than
+ *  the record are which day it was and what they weighed that morning. */
+export async function updateBodyPhoto(
+  uid: string,
+  id: string,
+  patch: { date: string; weightKg?: number },
+): Promise<void> {
+  await updateDoc(doc(db(), "users", uid, "bodyPhotos", id), {
+    // forMerge, not forWrite: clearing the weight has to erase the field
+    // rather than leave the old number sitting under the photo.
+    ...(forMerge(patch) as Record<string, unknown>),
+    updatedAt: serverTimestamp(),
+  });
 }
 
 export async function deleteBodyPhoto(
