@@ -36,3 +36,20 @@ type = "command"
 # without a git remote shouldn't break `renri add`.
 run = "git fetch || true"
 shell = "auto"
+
+# Project-local: `.env` is git-ignored, so a fresh worktree starts
+# without the Firebase config and the app boots straight into
+# "Firebase の設定が必要です". Copied from the main checkout, which
+# is where `type = "copy"` reads from.
+#
+# Only `.env`: a copy hook errors on a missing source rather than
+# skipping it, so anything listed here has to be a file every
+# checkout is documented to have. `.env` is that file (README's
+# `cp .env.example .env`); a personal `.env.local` is not.
+#
+# This sits after the kata-owned three on purpose — pj-pnpm owns
+# `hooks.post_create[0..2]` by index, and an entry placed before
+# them would be overwritten by the next `kata apply`.
+[[hooks.post_create]]
+type = "copy"
+files = [".env"]
