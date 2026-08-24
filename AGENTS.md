@@ -613,6 +613,65 @@ takes here (see the git workflow above).
   signed-in-only baseline the template describes — they are the real
   invite gate (below). Never "replace with the project's schema".
 
+### Vercel previews and Firebase authorized domains
+
+A PR preview builds and serves, and then sign-in fails on it. Firebase
+Auth refuses to start a flow from a hostname that is not on the project's
+authorized-domains list, and that list takes exact hostnames — the
+production alias and the project alias sit on it as two separate entries,
+which is the evidence that there is no wildcard to lean on. Vercel gives
+every branch its own hostname (`hakari-git-<branch>-…vercel.app`), so a
+fresh branch is a hostname nobody authorized.
+
+One hostname that never changes is the way out. `hakari-preview.vercel.app`
+is on the list; re-point it at whatever you want to look at:
+
+```sh
+vercel alias set <deployment-url> hakari-preview.vercel.app
+```
+
+**Never add a per-branch preview hostname to Firebase.** The list grows a
+dead entry per merged branch, and every entry is a domain allowed to begin
+an auth flow for this project.
+
+Reading the list, and adding to it, is the Identity Toolkit REST API — the
+console does not take these hostnames cleanly. `PATCH` replaces the whole
+array, so `GET` it first and send it back with the addition:
+
+```sh
+curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "X-Goog-User-Project: hakari-app" \
+  https://identitytoolkit.googleapis.com/admin/v2/projects/hakari-app/config \
+  | jq .authorizedDomains
+```
+
+Two things that look like this problem and are not:
+
+- **The preview 302s to `vercel.com/login?next=/sso-api…`.** That is Vercel
+  Deployment Protection, in front of the app and nothing to do with
+  Firebase. A browser signed in to Vercel passes it without noticing;
+  `curl`, a headless browser and a phone that has never seen Vercel do
+  not. Never diagnose an auth failure from a fetch that never reached the
+  app. Protection stays **on** by decision: previews carry unreleased
+  screens and live `api/*` routes, and the owner's own browser is already
+  signed in. The cost is that no agent or script can look at a preview —
+  visual checks run against `pnpm dev`, and the preview is for a human.
+- **A preview showing 「Firebase の設定が見つかりません」, or every `api/*`
+  route 500ing.** Vercel env vars are scoped per environment and Vite
+  inlines the `VITE_*` ones *at build time*, so a variable that exists
+  only on Production leaves the preview build with nothing. The six
+  `VITE_FIREBASE_*` plus `FIREBASE_PROJECT_ID` are now set on Preview as
+  well — they are public by design, the rules are the protection. The AI
+  provider keys are deliberately **not**: a preview that can call them is
+  a preview that can spend money, and the daily cap is per user, not per
+  deployment. So on a preview the app signs in and every screen works
+  except the ones that call a model. `vercel env ls preview` shows what
+  is actually there.
+
+Adding a variable to Preview does not retrofit it into an existing
+deployment: rebuild with `vercel redeploy <deployment-url>` and re-point
+the alias at what comes out.
+
 ### Invariants that span files
 
 Rules files cannot import TypeScript, so a few facts are duplicated by
@@ -623,6 +682,7 @@ hand. Grep before touching any of them.
 | Owner address | `shared/access.ts` `OWNER_EMAIL`, `firestore.rules` `owner()`, `storage.rules` `owner()` |
 | Invite list path `config/access` | `shared/access.ts` `ACCESS_DOC`, both rules files |
 | Provider timeout inside function timeout | `PROVIDER_TIMEOUT_MS` (default 280 s, `api/_lib/providers.ts`) must stay under `vercel.json` → `functions."api/*.ts".maxDuration` (300 s) |
+| The fixed preview hostname | Firebase authorized domains (Identity Toolkit config) + the `vercel alias set` line under *Vercel previews and Firebase authorized domains* above |
 
 The daily AI cap is enforced by the **rules**, not by the server: routes
 increment `users/{uid}/usage/{yyyy-MM-dd}.calls` with the *caller's own*
