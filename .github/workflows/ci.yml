@@ -1,4 +1,3 @@
-
 # kata-managed — source: yukimemi/pj-pnpm/.github/workflows/ci.yml.tera
 # Local edits are reverted on the next `kata apply`. Push fixes upstream.
 name: CI
@@ -8,6 +7,14 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+
+# Least-privilege `GITHUB_TOKEN`: this job only reads the repo and
+# runs `pnpm install` / lint / build / test — it never pushes, opens
+# a PR, or calls the GitHub API — so it needs no more than read
+# access, regardless of what the repo's default token permissions
+# are set to.
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -37,6 +44,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6.1.0
+        with:
+          # This job never pushes, so there is nothing later in the
+          # job (including `pnpm install`'s dependency install
+          # scripts) that needs the checked-out token still sitting
+          # in the git credential helper.
+          persist-credentials: false
 
       # Checkout first, pnpm second: with no `version:` input the action
       # reads `packageManager` out of the checked-out `package.json`, and
