@@ -35,6 +35,13 @@
   --chart-trend: #d93e28;
   --chart-raw: #a8b0b8;
   --chart-goal: #0f6b57;
+
+  /* The PFC stack. Three steps that have to stay apart from each other
+   * *and* from the needle — protein blue, fat amber, carbohydrate slate.
+   * Red is not available here: it is the reading colour. */
+  --chart-protein: #3a6ea5;
+  --chart-fat: #c08a2e;
+  --chart-carbs: #7f8794;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -57,6 +64,9 @@
     --chart-trend: #ff5a3c;
     --chart-raw: #6b7681;
     --chart-goal: #35c4a8;
+    --chart-protein: #6ea8e0;
+    --chart-fat: #e0a34a;
+    --chart-carbs: #9aa4b1;
   }
 }
 
