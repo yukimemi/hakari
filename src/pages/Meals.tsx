@@ -1,6 +1,6 @@
 // Meal log for one day, plus the capture flow.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useSubView } from "../lib/subview";
 import { useUid } from "../auth/context";
 import { useMealsOfDay, useSettings, useWorkoutsOfDay } from "../data/hooks";
@@ -24,6 +24,11 @@ import {
 import { formatKcal } from "../lib/format";
 import { todayKey } from "../../shared/calc";
 import type { MealSlot, TaskAssignment } from "../../shared/schema";
+
+// Recharts is the heaviest thing on this screen and none of it is needed
+// to log a meal, which is what the tab is opened for — same reason the
+// chart screens are split out of the router in App.tsx.
+const MealTrend = lazy(() => import("../components/MealTrend"));
 
 const SLOT_LABEL: Record<MealSlot, string> = {
   breakfast: "朝食",
@@ -140,6 +145,13 @@ export default function Meals() {
           onDelete={() => deleteMeal(uid, meal.id, meal.photoPath)}
         />
       ))}
+
+      <Suspense fallback={<div className="h-72" />}>
+        <MealTrend
+          targetIntakeKcal={targets?.targetIntakeKcal}
+          onPickDate={setDate}
+        />
+      </Suspense>
     </>
   );
 }
