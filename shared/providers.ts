@@ -65,9 +65,9 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
   },
 };
 
-/** The four places an LLM gets called. Each can point at a different
+/** The five places an LLM gets called. Each can point at a different
  *  provider — vision-heavy work on one, cheap text on another. */
-export const AI_TASKS = ["meal", "body", "plan", "coach"] as const;
+export const AI_TASKS = ["meal", "body", "plan", "coach", "exercise"] as const;
 export type AiTask = (typeof AI_TASKS)[number];
 
 export const AI_TASK_META: Record<
@@ -92,6 +92,11 @@ export const AI_TASK_META: Record<
   coach: {
     label: "毎日のコーチコメント",
     description: "直近の記録を見て今日の一言",
+    needsVision: false,
+  },
+  exercise: {
+    label: "運動カロリーの推定",
+    description: "自由入力の種目名・セット数・回数から消費カロリーを推定",
     needsVision: false,
   },
 };
