@@ -90,6 +90,11 @@ export const WorkoutEntry = z.object({
   name: z.string(),
   minutes: z.number().min(0).max(600).optional(),
   steps: z.number().min(0).max(200000).optional(),
+  /** Strength-style entries: how many sets, and reps per set. Free text
+   *  because reps vary set to set ("12,10,8") or are time-based ("30秒"),
+   *  the same convention `PlanExercise.reps` already uses. */
+  sets: z.number().min(1).max(50).optional(),
+  reps: z.string().max(50).optional(),
   kcalBurned: z.number().min(0).max(5000),
   note: z.string().max(500).optional(),
 });
@@ -200,6 +205,15 @@ export const CoachComment = z.object({
 });
 export type CoachComment = z.infer<typeof CoachComment>;
 
+/** A custom exercise has no METs constant to look up (`shared/exercises.ts`
+ *  only covers the fixed catalogue), so this is what backs the "AI で計算"
+ *  button on a free-input workout-log entry. */
+export const ExerciseBurn = z.object({
+  kcalBurned: z.number().min(0).max(2000).describe("推定消費カロリー (kcal)"),
+  reasoning: z.string().max(150).describe("推定の根拠を一言。日本語"),
+});
+export type ExerciseBurn = z.infer<typeof ExerciseBurn>;
+
 // ---------------------------------------------------------------------------
 // App settings
 // ---------------------------------------------------------------------------
@@ -218,6 +232,7 @@ export const AiSettings = z.object({
   body: TaskAssignment,
   plan: TaskAssignment,
   coach: TaskAssignment,
+  exercise: TaskAssignment,
 });
 export type AiSettings = z.infer<typeof AiSettings>;
 
@@ -259,6 +274,7 @@ export const DEFAULT_SETTINGS: Settings = {
     body: { provider: "anthropic" },
     plan: { provider: "anthropic" },
     coach: { provider: "anthropic" },
+    exercise: { provider: "anthropic" },
   },
   training: {
     equipment: ["none", "mat"],

@@ -8,6 +8,7 @@ import { auth } from "./firebase";
 import type {
   BodyAnalysis,
   CoachComment,
+  ExerciseBurn,
   MealAnalysis,
   TaskAssignment,
   WorkoutPlan,
@@ -207,6 +208,21 @@ export const api = {
   }): Promise<{ comment: CoachComment; provider: ProviderId; model: string }> {
     const { assignment, ...rest } = args;
     return call("/api/coach", {
+      method: "POST",
+      body: { provider: assignment.provider, model: assignment.model, ...rest },
+    });
+  },
+
+  exerciseKcal(args: {
+    assignment: TaskAssignment;
+    name: string;
+    sets?: number;
+    reps?: string;
+    minutes?: number;
+    weightKg: number;
+  }): Promise<{ estimate: ExerciseBurn; provider: ProviderId; model: string }> {
+    const { assignment, ...rest } = args;
+    return call("/api/exercise-kcal", {
       method: "POST",
       body: { provider: assignment.provider, model: assignment.model, ...rest },
     });
