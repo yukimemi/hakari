@@ -1,9 +1,9 @@
 preset = "github.com/yukimemi/pj-presets:web-react-firebase"
-applied_at = "2026-08-24T03:39:22.217077226Z"
+applied_at = "2026-08-31T03:36:15.18797635Z"
 
 [[templates]]
 source = "github.com/yukimemi/pj-base"
-rev = "10cd49c09b95af8add4daf71c5151835821cb670"
+rev = "b205d49d8676a2d3b78efa020749b7f012921159"
 version = "0.18.0"
 
 [[templates]]
@@ -27,6 +27,9 @@ once_applied = true
 [files.".claude/skills/renri/SKILL.md"]
 once_applied = true
 
+[files.".editorconfig"]
+content_hash = "31dd1c43fbb48cd8380a0fae0780f05d42eef658ea695772c51b4bde291f7438"
+
 [files.".env.example"]
 once_applied = true
 
@@ -46,7 +49,7 @@ content_hash = "70f29b0de97b239437263ee3a701f684e8b7eb5d13fbddf22d5ea8d2efb5b147
 content_hash = "37e1243a976daf5d69ea2ba9cef66e9a07c3be29073ce4f47b463d826f8cdae7"
 
 [files.".github/workflows/claude.yml"]
-content_hash = "e66fb0abebcbb904ca4cdce2be4ffb280175f5ffda5d05cb48598c6b9c5c5c1b"
+content_hash = "06ce8b371d82ab6ec29f0e26307e5d9b42f57662a85e4fef688013b398d5fd58"
 
 [files.".github/workflows/deploy.yml"]
 once_applied = true
