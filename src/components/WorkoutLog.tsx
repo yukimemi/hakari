@@ -21,6 +21,7 @@ import { EXERCISES } from "../../shared/exercises";
 import { exerciseKcal } from "../../shared/calc";
 import { formatKcal } from "../lib/format";
 import { api, ApiError } from "../lib/api";
+import { useWakeLock } from "../lib/wakeLock";
 import {
   Alert,
   Button,
@@ -74,6 +75,10 @@ export default function WorkoutLog({
   const [aiBusy, setAiBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // The estimate is one short call with no `Scanning` behind it, so the
+  // wake lock that component would have held is asked for here instead.
+  useWakeLock(aiBusy);
 
   const isCustom = choice === CUSTOM_ID;
   const selected = OPTIONS.find((o) => o.id === choice) ?? OPTIONS[0]!;

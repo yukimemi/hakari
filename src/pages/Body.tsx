@@ -33,6 +33,7 @@ import {
   TextInput,
 } from "../components/ui";
 import { formatKg } from "../lib/format";
+import { useWakeLock } from "../lib/wakeLock";
 import { ageFrom, bmi, todayKey } from "../../shared/calc";
 import type { BodyAnalysis } from "../../shared/schema";
 
@@ -307,6 +308,11 @@ function BodyCapture({
   );
   const [error, setError] = useState<string | null>(null);
   const [measureNote, setMeasureNote] = useState<string | null>(null);
+
+  // The run continues past the last phase `Scanning` covers: analysis flows
+  // straight into uploading the photo, and losing the lock there throws away
+  // the analysis that was just paid for.
+  useWakeLock(phase === "saving");
 
   useEffect(() => {
     return () => {

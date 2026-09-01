@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { useUid } from "../auth/context";
 import { api, ApiError, type EncodedImage } from "../lib/api";
 import { prepareImage } from "../lib/image";
+import { useWakeLock } from "../lib/wakeLock";
 import { saveMeal, uploadPhoto } from "../data/store";
 import Scanning from "./Scanning";
 import MealItemsEditor from "./MealItemsEditor";
@@ -80,6 +81,12 @@ export default function MealCapture({
     "idle" | "analyzing" | "recalculating" | "saving"
   >("idle");
   const [error, setError] = useState<string | null>(null);
+
+  // `Scanning` carries the lock through the two analysis phases but is gone
+  // by the time the photo uploads, and a lock dropped there loses the save
+  // the same way it loses an analysis — on a phone, over mobile data, the
+  // upload is the slowest part of the whole flow.
+  useWakeLock(phase === "saving");
 
   // Opening straight into the camera is the whole point of the dashboard
   // shortcut — one tap from "I am about to eat" to a photo.
