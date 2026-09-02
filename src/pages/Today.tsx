@@ -15,6 +15,7 @@ import {
   Reading,
 } from "../components/ui";
 import { formatKcal, formatSigned } from "../lib/format";
+import { useWakeLock } from "../lib/wakeLock";
 import type { MealSlot } from "../../shared/schema";
 
 /** Only used to tell the coach which meals of today are already in. */
@@ -275,6 +276,11 @@ function CoachPanel({
 }) {
   const [fresh, setFresh] = useState<CoachComment | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // No `Scanning` here — the one-liner is quick enough not to need the
+  // whole apparatus — so the wake lock it would have carried is asked for
+  // directly.
+  useWakeLock(busy);
 
   // What was written for today survives a trip to another tab; anything
   // older does not, because a one-liner about yesterday reads as a

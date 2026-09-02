@@ -12,10 +12,16 @@
 //   3. Elapsed seconds. A wait you can see the length of is a wait you can
 //      decide to keep waiting through.
 //
+// It also holds a screen wake lock. Not decoration: a phone that auto-locks
+// mid-analysis freezes the page and the answer is lost. This component is
+// mounted for exactly as long as a wait lasts, which is why the lock lives
+// here rather than being re-derived from a busy flag at every call site.
+//
 // Kept in the instrument language: the sweep is the needle colour, and the
 // edge carries graduations, so it reads as a measurement being taken.
 
 import { useEffect, useState } from "react";
+import { useWakeLock } from "../lib/wakeLock";
 
 type Props = {
   /** The steps, in the order the work happens. The last one holds. */
@@ -31,6 +37,8 @@ export default function Scanning({
   everySec = 4,
   variant = "overlay",
 }: Props) {
+  useWakeLock();
+
   const [step, setStep] = useState(0);
   const [elapsed, setElapsed] = useState(0);
 
