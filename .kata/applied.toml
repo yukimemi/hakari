@@ -1,9 +1,9 @@
 preset = "github.com/yukimemi/pj-presets:web-react-firebase"
-applied_at = "2026-08-31T03:36:15.18797635Z"
+applied_at = "2026-09-04T03:32:00.820198787Z"
 
 [[templates]]
 source = "github.com/yukimemi/pj-base"
-rev = "b205d49d8676a2d3b78efa020749b7f012921159"
+rev = "08989f887002780557cb6e0ce18141d7abf2c85e"
 version = "0.18.0"
 
 [[templates]]
@@ -28,7 +28,7 @@ once_applied = true
 once_applied = true
 
 [files.".editorconfig"]
-content_hash = "31dd1c43fbb48cd8380a0fae0780f05d42eef658ea695772c51b4bde291f7438"
+content_hash = "df3d6e27040e82c12677ac073ca9676cc92bffa2cb1b875bfe63d12b4dd1135b"
 
 [files.".env.example"]
 once_applied = true
