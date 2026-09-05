@@ -33,8 +33,8 @@ importers:
         specifier: ^6.2.10
         version: 6.2.10
       openai:
-        specifier: ^7.8.0
-        version: 7.8.0(undici@8.10.0)(ws@8.21.3)(zod@4.5.4)
+        specifier: ^7.9.0
+        version: 7.10.0(undici@8.10.0)(ws@8.21.3)(zod@4.5.4)
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -4141,8 +4141,8 @@ packages:
     resolution: {integrity: sha512-IFenVPgF70fSm1keSd2iDBIDIBZkroLeuffXq+wKTzTJlBpesFWojV9lb8mzOfaAzM1sr7HQHuO0vtV0zYekGg==}
     engines: {node: '>=8'}
 
-  openai@7.8.0:
-    resolution: {integrity: sha512-/2g9JzdnXNcjX1W/UlSNu+OdSFDAaAVt0n9Onom0kPenH54o59G2WrX/xjTnr26UHNSh6hxcAf58doGYRme2rw==}
+  openai@7.10.0:
+    resolution: {integrity: sha512-sn9t2Kls7O52PwuF9BUTYNu4Gk/r0lXJyrgaNht4TNRlZFb3dJIGO0RciSgjARGCBRtWjySubAQFJttlzUvGQQ==}
     engines: {node: '>=22.0.0'}
     peerDependencies:
       '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
@@ -9921,7 +9921,7 @@ snapshots:
     dependencies:
       is-wsl: 1.1.0
 
-  openai@7.8.0(undici@8.10.0)(ws@8.21.3)(zod@4.5.4):
+  openai@7.10.0(undici@8.10.0)(ws@8.21.3)(zod@4.5.4):
     optionalDependencies:
       undici: 8.10.0
       ws: 8.21.3
