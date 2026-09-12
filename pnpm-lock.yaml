@@ -33,7 +33,7 @@ importers:
         specifier: ^6.2.12
         version: 6.2.12
       openai:
-        specifier: ^7.12.1
+        specifier: ^7.13.0
         version: 7.15.0(undici@8.10.2)(ws@8.21.3)(zod@4.5.4)
       react:
         specifier: ^19.2.8
