@@ -146,49 +146,6 @@ function VoicePicker({
   );
 }
 
-/** Order to fall back through, worst-to-best being the wrong way round:
- *  the hints in PROVIDER_META already say Claude reads portions most
- *  reliably and Gemini has the free tier to run every meal through, so
- *  prefer those over whichever provider happens to be declared first. */
-const FALLBACK_ORDER: ProviderId[] = [
-  "anthropic",
-  "google",
-  "openrouter",
-  "openai",
-  "deepseek",
-];
-
-/** The stored defaults name Claude for every task, which is the right
- *  answer only if there is a Claude key. Rather than opening on four
- *  broken assignments and a "モデル一覧を取得できませんでした" under each,
- *  move any task whose provider has no key onto one that does. This
- *  rewrites the *saved* values only — an explicit choice made this visit
- *  (`edits`) is layered on top afterwards and always wins. */
-function withUsableProviders(
-  settings: Settings,
-  providers: ProviderStatus[],
-): Settings {
-  if (providers.length === 0) return settings;
-
-  const ai = { ...settings.ai };
-  let changed = false;
-
-  for (const task of AI_TASKS) {
-    const needsVision = AI_TASK_META[task].needsVision;
-    const current = providers.find((p) => p.id === ai[task].provider);
-    if (current?.configured && (!needsVision || current.vision)) continue;
-
-    const fallback = FALLBACK_ORDER.map((id) =>
-      providers.find((p) => p.id === id),
-    ).find((p) => p?.configured && (!needsVision || p.vision));
-    if (!fallback) continue;
-    ai[task] = { provider: fallback.id };
-    changed = true;
-  }
-
-  return changed ? { ...settings, ai } : settings;
-}
-
 export default function SettingsPage() {
   const uid = useUid();
   const { user, signOutUser } = useAuth();
@@ -204,9 +161,7 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const draft: Settings | null = loading
-    ? null
-    : { ...withUsableProviders(settings, providers), ...edits };
+  const draft: Settings | null = loading ? null : { ...settings, ...edits };
 
   useEffect(() => {
     api
