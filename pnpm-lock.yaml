@@ -54,7 +54,7 @@ importers:
         specifier: ^0.186.0
         version: 0.186.0
       zod:
-        specifier: ^4.6.2
+        specifier: ^4.6.4
         version: 4.6.4
     devDependencies:
       '@eslint/js':
