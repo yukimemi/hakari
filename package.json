@@ -22,7 +22,7 @@
     "date-fns": "^4.4.0",
     "firebase": "^12.19.0",
     "jose": "^6.2.12",
-    "openai": "^7.18.0",
+    "openai": "^7.19.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-hook-form": "^7.88.0",
