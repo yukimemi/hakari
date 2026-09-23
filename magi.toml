@@ -10,16 +10,33 @@
 #
 # What that leaves, and why each one has to be here:
 #
+# - `[verify]` runs this repo's package scripts, which no other layer knows.
 # - `[merge] base` names this repository's branch, and is required at all
 #   because of how this checkout is set up (see below).
 # - `[prompts]` are this project's conventions.
 #
-# No `[verify]`: ci.yml's install/lint/build/test are left to CI, because
-# they need pnpm/Node, which the magi machine doesn't have.
+# `[verify]` runs ci.yml's steps with bun, not pnpm/Node, which the magi
+# machine doesn't have. `pnpm test` stays with CI: its jsdom tests fail under
+# bun's runtime (jsdom's EventTarget rejects vitest's window setup).
 #
 # Rendered by teravars. Tera braces are live everywhere in this file, but
 # comments are stripped before Tera sees them (teravars >= 0.2.2), so a
 # comment may quote `{{ ... }}` freely.
+
+[verify]
+# The final gate before merge: ci.yml's `check` job in order, minus `pnpm
+# test`. A candidate worktree starts with no node_modules, so the
+# install is its own step. bun reads pnpm-lock.yaml and `--frozen-lockfile`
+# still fails on a drifted package.json; `--ignore-scripts` matches
+# pnpm-workspace.yaml's `allowBuilds` (every build denied — bun would
+# otherwise build re2 for minutes); the migrated bun.lock is deleted so magi's
+# `git add -A` never commits it. With no Node on PATH, `bun run` aliases
+# `node` to bun.
+gate = [
+  "bun install --frozen-lockfile --ignore-scripts; s=$?; rm -f bun.lock; exit $s",
+  "bun run lint",
+  "bun run build",
+]
 
 [merge]
 # Required here, and in every jj-colocated repo: jj keeps git's HEAD detached
