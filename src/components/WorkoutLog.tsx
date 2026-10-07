@@ -75,6 +75,8 @@ export default function WorkoutLog({
   const [aiBusy, setAiBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Correcting the kcal on a guided-session record, keyed by document id.
+  const [fixing, setFixing] = useState<{ id: string; value: string } | null>(null);
 
   // The estimate is one short call with no `Scanning` behind it, so the
   // wake lock that component would have held is asked for here instead.
@@ -127,6 +129,23 @@ export default function WorkoutLog({
       setError(err instanceof ApiError ? err.message : "計算に失敗しました");
     } finally {
       setAiBusy(false);
+    }
+  };
+
+  const saveFix = async (workout: (typeof workouts)[number]) => {
+    const value = Number(fixing?.value);
+    if (!fixing || fixing.value.trim() === "" || !(value >= 0)) {
+      setError("kcal を数字で入れてください");
+      return;
+    }
+    setError(null);
+    try {
+      // Same id, whole entry: the original estimate and its basis stay.
+      const { id, ...entry } = workout;
+      await saveWorkout(uid, { ...entry, kcalBurned: Math.round(value) }, id);
+      setFixing(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存に失敗しました");
     }
   };
 
@@ -231,11 +250,44 @@ export default function WorkoutLog({
                     .filter(Boolean)
                     .join(" / ") || null}
                 </p>
+                {workout.kcalBasis && (
+                  <p className="text-xs text-muted">
+                    推定 · {workout.kcalBasis}
+                    {workout.kcalEstimated !== undefined &&
+                      workout.kcalBurned !== workout.kcalEstimated &&
+                      ` (訂正済み。元の推定 ${formatKcal(workout.kcalEstimated)}kcal)`}
+                  </p>
+                )}
+                {fixing?.id === workout.id && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <NumberInput
+                      value={fixing.value}
+                      onChange={(e) => setFixing({ id: workout.id, value: e.target.value })}
+                      suffix="kcal"
+                      inputMode="numeric"
+                    />
+                    <Button variant="primary" onClick={() => saveFix(workout)}>
+                      保存
+                    </Button>
+                    <Button onClick={() => setFixing(null)}>やめる</Button>
+                  </div>
+                )}
               </div>
               <div className="flex shrink-0 items-baseline gap-3">
                 <span className="reading text-sm">
                   {formatKcal(workout.kcalBurned)}
                 </span>
+                {workout.kcalBasis && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFixing({ id: workout.id, value: String(workout.kcalBurned) })
+                    }
+                    className="text-xs text-muted underline"
+                  >
+                    訂正
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => deleteWorkout(uid, workout.id)}

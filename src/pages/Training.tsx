@@ -15,12 +15,15 @@ import {
   Empty,
   Panel,
   Reading,
+  Select,
 } from "../components/ui";
 import { formatKcal } from "../lib/format";
 import { api, ApiError } from "../lib/api";
 import Scanning from "../components/Scanning";
 import WorkoutLog from "../components/WorkoutLog";
 import ClipStage from "../components/ClipStage";
+import WorkoutSession from "./WorkoutSession";
+import { defaultMenu } from "../workout/session";
 import { useClips } from "../data/clips";
 import { isOwner } from "../../shared/access";
 import { ageFrom, bmi, exerciseKcal, todayKey } from "../../shared/calc";
@@ -49,6 +52,10 @@ export default function Training() {
       plan.days[Number(day)]?.exercises.find((e) => e.id === id) ?? null
     );
   }, [demoView.value, plan]);
+  // "先生と始める": the value is the plan day to run, or "free" for the
+  // catalogue menu when no plan has been made yet.
+  const sessionView = useSubView("session");
+  const [pickedDay, setPickedDay] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,6 +93,26 @@ export default function Training() {
     }
   };
 
+  if (sessionView.value !== null) {
+    const day = plan?.days[Number(sessionView.value)];
+    return (
+      <WorkoutSession
+        exercises={day ? day.exercises : defaultMenu(settings.training.equipment)}
+        title={day ? day.label : "おすすめメニュー"}
+        settings={settings}
+        shape={shape}
+        weight={
+          weights.length > 0
+            ? { kg: currentKg, source: "latest" }
+            : goal.startWeightKg > 0
+              ? { kg: goal.startWeightKg, source: "start" }
+              : undefined
+        }
+        onClose={sessionView.close}
+      />
+    );
+  }
+
   if (demo) {
     return (
       <Demonstration
@@ -114,6 +141,34 @@ export default function Training() {
   return (
     <>
       <WorkoutLog date={todayKey()} weightKg={currentKg} />
+
+      <Panel title="先生と運動">
+        <p className="text-sm leading-relaxed">
+          時間と元気度に合わせて量を調整し、声かけと休憩タイマーで進めます。
+          終わると運動の記録に自動で保存されます。
+        </p>
+        {plan && (
+          <Select
+            value={pickedDay}
+            onChange={(e) => setPickedDay(Number(e.target.value))}
+            aria-label="今日やる日"
+          >
+            {plan.days.map((day, i) => (
+              <option key={i} value={i}>
+                {day.label}
+              </option>
+            ))}
+          </Select>
+        )}
+        <Button
+          variant="primary"
+          size="lg"
+          className="mt-3"
+          onClick={() => sessionView.open(plan ? String(pickedDay) : "free")}
+        >
+          先生と始める
+        </Button>
+      </Panel>
 
       <Panel
         title={plan ? "今週のメニュー" : "メニュー"}

@@ -134,6 +134,7 @@ export function useRecentLogs(days = 14) {
   const uid = useUid();
   const [meals, setMeals] = useState<StoredMeal[]>([]);
   const [workouts, setWorkouts] = useState<StoredWorkout[]>([]);
+  const [workoutsLoaded, setWorkoutsLoaded] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const range = useMemo(() => {
@@ -155,7 +156,10 @@ export function useRecentLogs(days = 14) {
       uid,
       range.from,
       range.to,
-      setWorkouts,
+      (items) => {
+        setWorkouts(items);
+        setWorkoutsLoaded(true);
+      },
       setError,
     );
     return () => {
@@ -199,7 +203,7 @@ export function useRecentLogs(days = 14) {
     return map;
   }, [meals, workouts]);
 
-  return { meals, workouts, byDate, range, error };
+  return { meals, workouts, workoutsLoaded, byDate, range, error };
 }
 
 export function useBodyPhotos(): Async<BodyPhotoRecord[]> {
