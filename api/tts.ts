@@ -34,8 +34,23 @@ export const POST = route(async (request) => {
   const unique = [
     ...new Map(body.phrases.map((p) => [`${p.phase}\n${p.text}`, p])).values(),
   ];
-  const results = await Promise.allSettled(
-    unique.map(async (p) => ({ p, wav: await synthesize(p.text, p.phase, key) })),
+  // A small worker pool, so a full 6-line request stays inside the
+  // per-instance concurrency cap instead of tripping it.
+  const results: PromiseSettledResult<{ p: (typeof unique)[number]; wav: Buffer }>[] =
+    new Array(unique.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < unique.length) {
+      const i = next++;
+      const p = unique[i];
+      results[i] = await synthesize(p.text, p.phase, key).then(
+        (wav) => ({ status: "fulfilled" as const, value: { p, wav } }),
+        (reason: unknown) => ({ status: "rejected" as const, reason }),
+      );
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(ttsConfig().maxConcurrent, unique.length) }, worker),
   );
 
   const response: TtsResponse = { profile: ttsProfile(), audio: [], skipped: [] };

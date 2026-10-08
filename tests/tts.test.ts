@@ -19,6 +19,14 @@ const SECRET = "AIza-secret-key-value";
 const wavB64 = (seconds: number) =>
   pcmToWav(Buffer.alloc(Math.floor(seconds * 48_000))).toString("base64");
 
+/** The REST shape: audio sits in steps[].content[], not `output_audio`. */
+const rest = (data: string) => ({
+  steps: [
+    { type: "user_input", content: [{ type: "text", text: "x" }] },
+    { type: "model_output", content: [{ type: "audio", data }] },
+  ],
+});
+
 const req = (body: unknown) =>
   new Request("http://x/api/tts", {
     method: "POST",
@@ -33,7 +41,7 @@ beforeEach(() => {
   delete process.env.GEMINI_TTS_MODEL;
   delete process.env.GEMINI_TTS_VOICE;
   fetchMock = vi.fn(async () =>
-    Response.json({ output_audio: { data: wavB64(1) } }),
+    Response.json(rest(wavB64(1))),
   );
   vi.stubGlobal("fetch", fetchMock);
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -131,19 +139,19 @@ describe("POST /api/tts", () => {
 
   it("wraps raw PCM and rejects audio longer than allowed", async () => {
     fetchMock.mockResolvedValueOnce(
-      Response.json({ output_audio: { data: Buffer.alloc(48_000).toString("base64") } }),
+      Response.json(rest(Buffer.alloc(48_000).toString("base64"))),
     );
     const res = await POST(req(ok));
     const { audio } = (await res.json()) as { audio: { wav: string }[] };
     expect(Buffer.from(audio[0].wav, "base64").subarray(0, 4).toString()).toBe("RIFF");
 
-    fetchMock.mockResolvedValueOnce(Response.json({ output_audio: { data: wavB64(30) } }));
+    fetchMock.mockResolvedValueOnce(Response.json(rest(wavB64(30))));
     expect((await POST(req(ok))).status).toBe(502);
   });
 
   it("keeps the response under the size budget and reports what it skipped", async () => {
     fetchMock.mockImplementation(async () =>
-      Response.json({ output_audio: { data: wavB64(18) } }),
+      Response.json(rest(wavB64(18))),
     );
     const phrases = Array.from({ length: 6 }, (_, i) => ({
       text: `せつめい${i}`,
@@ -153,8 +161,29 @@ describe("POST /api/tts", () => {
       audio: unknown[];
       skipped: unknown[];
     };
-    expect(body.audio.length).toBeLessThan(6);
+    // 18s clips are ~0.86MB each: three fit under the 3MB budget.
+    expect(body.audio).toHaveLength(3);
+    expect(body.skipped).toHaveLength(3);
     expect(body.audio.length + body.skipped.length).toBe(6);
+  });
+
+  it("runs a full 6-line request inside the concurrency cap", async () => {
+    let active = 0;
+    let peak = 0;
+    fetchMock.mockImplementation(async () => {
+      peak = Math.max(peak, ++active);
+      await new Promise((r) => setTimeout(r, 5));
+      active--;
+      return Response.json(rest(wavB64(1)));
+    });
+    const phrases = Array.from({ length: 6 }, (_, i) => ({ text: `かず${i}`, phase: "exercise" }));
+    const body = (await (await POST(req({ phrases }))).json()) as {
+      audio: unknown[];
+      skipped: unknown[];
+    };
+    expect(body.audio).toHaveLength(6);
+    expect(body.skipped).toHaveLength(0);
+    expect(peak).toBeLessThanOrEqual(3);
   });
 
   it("generates identical lines once", async () => {

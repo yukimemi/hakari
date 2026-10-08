@@ -166,8 +166,18 @@ export async function synthesize(
 
     let data: string | undefined;
     try {
-      const body = (await res.json()) as { output_audio?: { data?: string } };
-      data = body.output_audio?.data;
+      // REST returns the full interaction; the audio is the last audio
+      // block of the model_output step (`output_audio` is an SDK-only
+      // convenience, kept as a fallback in case a gateway adds it).
+      const body = (await res.json()) as {
+        steps?: { type?: string; content?: { type?: string; data?: string }[] }[];
+        output_audio?: { data?: string };
+      };
+      const blocks = (body.steps ?? [])
+        .filter((s) => s.type === "model_output")
+        .flatMap((s) => s.content ?? [])
+        .filter((c) => c.type === "audio" && c.data);
+      data = blocks.at(-1)?.data ?? body.output_audio?.data;
     } catch {
       /* fall through */
     }

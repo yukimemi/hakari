@@ -12,7 +12,6 @@ import { speak, cancelSpeech, speechSupported } from "../speech/speak";
 import {
   closingLine,
   introLine,
-  reusablePhrases,
   setFallbackVoice,
   teacher,
 } from "../speech/gemini";
@@ -93,8 +92,11 @@ export default function Training() {
     }
   };
 
-  // Generate the teacher's reusable lines while the menu is on screen, long
-  // before anyone taps a exercise. Playback never waits on this: a line
+  // Generate the exercise intro lines while the menu is on screen, long
+  // before anyone taps an exercise. Counts and set/rest cues
+  // (`reusablePhrases`) are deliberately not generated here: nothing on
+  // this screen plays them yet, and the workout flow should request them
+  // when it starts using them rather than have every menu visit pay. Playback never waits on this: a line
   // that is not cached yet is simply spoken by the device voice.
   const geminiVoice = settings.voiceEnabled && settings.geminiVoiceEnabled;
   useEffect(() => {
@@ -103,13 +105,10 @@ export default function Training() {
     const controller = new AbortController();
     const exercises = plan.days.flatMap((d) => d.exercises);
     void teacher.prefetch(
-      [
-        ...reusablePhrases(Math.max(1, ...exercises.map((e) => e.sets))),
-        ...exercises.map((e) => ({
-          text: introLine(e),
-          phase: "exercise" as const,
-        })),
-      ],
+      exercises.map((e) => ({
+        text: introLine(e),
+        phase: "exercise" as const,
+      })),
       controller.signal,
     );
     return () => controller.abort();
