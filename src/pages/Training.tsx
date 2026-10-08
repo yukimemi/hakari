@@ -99,16 +99,18 @@ export default function Training() {
     }
   };
 
-  // Generate the exercise intro lines while the menu is on screen, long
-  // before anyone taps an exercise. A guided session warms its own cues
-  // (see WorkoutSession). Playback never waits on this: a line that is not
-  // cached yet is simply spoken by the device voice.
+  // Generate the intro lines of the day picked for today while the menu is
+  // on screen, long before anyone taps an exercise; the other days are left
+  // alone so the whole week is not bought up front. A guided session warms
+  // its own cues (see WorkoutSession). Playback never waits on this: a line
+  // that is not cached yet is simply spoken by the device voice.
   const geminiVoice = settings.voiceEnabled && settings.geminiVoiceEnabled;
   useEffect(() => {
     teacher.setGeminiEnabled(geminiVoice);
     if (!geminiVoice || !plan) return;
     const controller = new AbortController();
-    const exercises = plan.days.flatMap((d) => d.exercises);
+    const exercises = plan.days[pickedDay]?.exercises ?? [];
+    if (!exercises.length) return;
     void teacher.prefetch(
       exercises.map((e) => ({
         text: introLine(e),
@@ -117,7 +119,7 @@ export default function Training() {
       controller.signal,
     );
     return () => controller.abort();
-  }, [geminiVoice, plan]);
+  }, [geminiVoice, plan, pickedDay]);
 
   if (sessionView.value !== null) {
     const day = plan?.days[Number(sessionView.value)];
@@ -275,7 +277,7 @@ export default function Training() {
 
 /** Full-screen demonstration: the avatar performs the movement on loop
  *  while the coaching cue is spoken once. */
-function Demonstration({
+export function Demonstration({
   exercise,
   shape,
   avatarSrc,
@@ -493,14 +495,23 @@ function Demonstration({
             loading={saving}
             onClick={async () => {
               setSaving(true);
+              let closingSpeech: { cancel: () => void } | undefined;
               if (voiceEnabled && geminiVoice) {
                 finished.current = true;
-                teacher.say({
+                closingSpeech = teacher.say({
                   text: closingLine(exercise.name),
                   phase: "closing",
                 });
               }
-              await onComplete(minutes, kcal);
+              try {
+                await onComplete(minutes, kcal);
+              } catch {
+                // The save failed and the screen stays: the closing words
+                // are cancelled and leaving silences everything again.
+                finished.current = false;
+                closingSpeech?.cancel();
+                setSaving(false);
+              }
             }}
           >
             この種目を完了にする

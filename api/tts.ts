@@ -1,4 +1,4 @@
-// POST /api/tts
+// POST /api/tts, GET /api/tts
 //
 // Turns short teacher lines into speech with Gemini, so the browser can
 // cache them before a workout starts. The key stays here; the browser only
@@ -17,6 +17,14 @@ import {
   ttsConfig,
   ttsProfile,
 } from "./_lib/tts.js";
+
+/** The voice profile currently in force. Cached audio is only reusable
+ *  while this matches, so the client asks before trusting its cache. Needs
+ *  a signed-in user but spends no quota and no key. */
+export const GET = route(async (request) => {
+  await requireUser(request);
+  return json({ profile: ttsProfile() });
+});
 
 /** Stay under Vercel's ~4.5MB response ceiling once base64'd (x4/3). */
 const MAX_AUDIO_BYTES = 3_000_000;

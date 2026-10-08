@@ -95,6 +95,11 @@ export const api = {
     return call("/api/tts", { method: "POST", body: { phrases }, signal });
   },
 
+  /** Current server voice profile; spends no quota. */
+  ttsProfile(signal?: AbortSignal): Promise<{ profile: string }> {
+    return call("/api/tts", { method: "GET", signal });
+  },
+
   providers(): Promise<{ providers: ProviderStatus[] }> {
     return call("/api/models", { method: "GET" });
   },

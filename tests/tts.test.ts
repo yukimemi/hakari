@@ -9,7 +9,7 @@ vi.mock("../api/_lib/usage.js", async (orig) => ({
   consumeCall: vi.fn(async () => ({ used: 1, limit: 40 })),
 }));
 
-import { POST } from "../api/tts";
+import { GET, POST } from "../api/tts";
 import { requireUser } from "../api/_lib/auth.js";
 import { AuthError } from "../api/_lib/auth.js";
 import { consumeCall, UsageError } from "../api/_lib/usage.js";
@@ -200,5 +200,25 @@ describe("POST /api/tts", () => {
   it("generates identical lines once", async () => {
     await POST(req({ phrases: [ok.phrases[0], ok.phrases[0]] }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("GET /api/tts", () => {
+  const get = () =>
+    new Request("http://x/api/tts", { method: "GET", headers: { authorization: "Bearer t" } });
+
+  it("returns the voice profile without spending quota or calling the provider", async () => {
+    const res = await GET(get());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ profile: expect.stringMatching(/\|/) });
+    expect(consumeCall).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("requires a signed-in user", async () => {
+    vi.mocked(requireUser).mockRejectedValueOnce(new AuthError("ログインが必要です", 401));
+    const res = await GET(get());
+    expect(res.status).toBe(401);
+    expect(consumeCall).not.toHaveBeenCalled();
   });
 });

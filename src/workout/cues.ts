@@ -183,3 +183,9 @@ export function enteredNewSet(prev: SceneRef, next: SceneRef & { paused: boolean
   if (next.phase !== "active" || next.paused) return false;
   return prev.phase === "rest" || (prev.phase === "active" && prev.index !== next.index);
 }
+
+// True when a set has just ended into its rest, so the set's own cues (pace
+// counts, the start line) are dropped before the rest line is queued.
+export function enteredRest(prev: SceneRef, next: SceneRef & { paused: boolean }): boolean {
+  return next.phase === "rest" && !next.paused && prev.phase === "active";
+}

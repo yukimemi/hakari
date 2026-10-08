@@ -19,7 +19,9 @@ class FakeSource {
   stop() { this.stopped = true; this.onended?.(); }
 }
 
-function setup(opts: { state?: string; generate?: ReturnType<typeof vi.fn> } = {}) {
+function setup(
+  opts: { state?: string; generate?: ReturnType<typeof vi.fn>; fetchProfile?: ReturnType<typeof vi.fn> } = {},
+) {
   const sources: FakeSource[] = [];
   const ctx: AudioContextLike = {
     currentTime: 0,
@@ -45,6 +47,7 @@ function setup(opts: { state?: string; generate?: ReturnType<typeof vi.fn> } = {
     store,
     audioContext: () => ctx,
     generate: generate as never,
+    fetchProfile: opts.fetchProfile as never,
     fallback: (text, onEnd) => {
       spoken.push(text);
       fallbackEnds.push(onEnd);
@@ -270,5 +273,113 @@ describe("prefetch", () => {
     t.teacher.say({ text: "あなたへ", phase: "closing" });
     await t.flush();
     expect(t.sources[0]?.started).toBe(true);
+  });
+});
+
+describe("interrupt", () => {
+  it("drops queued and playing scene lines but keeps closing words", async () => {
+    const t = setup();
+    for (const x of ["rest", "next", "bye"]) await t.cache(x, x === "bye" ? "closing" : "rest");
+    t.teacher.say({ text: "rest", phase: "rest" });
+    await t.flush();
+    t.teacher.say({ text: "next", phase: "rest" });
+    t.teacher.say({ text: "bye", phase: "closing" });
+    t.teacher.interrupt();
+    await t.flush();
+    expect(t.sources[0].stopped).toBe(true);
+    // "next" never started; the closing line took over.
+    expect(t.sources).toHaveLength(2);
+    expect(t.sources[1].stopped).toBe(false);
+  });
+
+  it("leaves a playing closing line alone", async () => {
+    const t = setup();
+    await t.cache("bye", "closing");
+    t.teacher.say({ text: "bye", phase: "closing" });
+    await t.flush();
+    t.teacher.interrupt();
+    expect(t.sources[0].stopped).toBe(false);
+  });
+
+  it("does not let a line still being decoded start after the interrupt", async () => {
+    const t = setup();
+    await t.cache("rest", "rest");
+    t.teacher.say({ text: "rest", phase: "rest" });
+    t.teacher.interrupt();
+    await t.flush();
+    expect(t.sources).toHaveLength(0);
+    // The next scene's cue is not held back by the dropped one.
+    await t.cache("go");
+    t.teacher.say({ text: "go", phase: "exercise" });
+    await t.flush();
+    expect(t.sources).toHaveLength(1);
+    expect(t.events.at(-1)).toBe(true);
+  });
+});
+
+describe("voice profile", () => {
+  it("speaks on the device until the profile is confirmed, then uses the cache", async () => {
+    let resolve!: (p: string) => void;
+    const fetchProfile = vi.fn(() => new Promise<string>((r) => (resolve = r)));
+    const t = setup({ fetchProfile });
+    await t.cache("いち");
+    t.teacher.say({ text: "いち", phase: "exercise" });
+    await t.flush();
+    expect(t.spoken).toEqual(["いち"]);
+    expect(t.sources).toHaveLength(0);
+    resolve(PROFILE);
+    await t.teacher.refreshProfile();
+    t.fallbackEnds[0]();
+    t.teacher.say({ text: "いち", phase: "exercise" });
+    await t.flush();
+    expect(t.sources).toHaveLength(1);
+    expect(fetchProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it("retires audio cached under a profile the server no longer uses", async () => {
+    const t = setup({ fetchProfile: vi.fn(async () => "new|voice|2") });
+    await t.cache("いち");
+    await t.teacher.refreshProfile();
+    t.teacher.say({ text: "いち", phase: "exercise" });
+    await t.flush();
+    expect(t.sources).toHaveLength(0);
+    expect(t.spoken).toEqual(["いち"]);
+  });
+
+  it("keeps the stored profile when the check fails", async () => {
+    const t = setup({ fetchProfile: vi.fn(async () => { throw new Error("offline"); }) });
+    await t.cache("いち");
+    await t.teacher.refreshProfile();
+    t.teacher.say({ text: "いち", phase: "exercise" });
+    await t.flush();
+    expect(t.sources).toHaveLength(1);
+  });
+
+  it("prefetch waits for the confirmation before looking at the cache", async () => {
+    const generate = vi.fn(async () => ({ profile: "new|voice|2", audio: [], skipped: [] }));
+    const t = setup({ generate, fetchProfile: vi.fn(async () => "new|voice|2") });
+    await t.cache("いち");
+    const res = await t.teacher.prefetch([{ text: "いち", phase: "exercise" }]);
+    // The old entry does not count under the new profile, so it is requested.
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(res.cached).toBe(0);
+  });
+});
+
+describe("quota", () => {
+  it("stops asking once the daily limit is reported", async () => {
+    const generate = vi.fn(async () => {
+      throw Object.assign(new Error("limit"), { code: "limit" });
+    });
+    const t = setup({ generate });
+    const first = await t.teacher.prefetch([{ text: "a", phase: "exercise" }]);
+    const second = await t.teacher.prefetch([{ text: "b", phase: "exercise" }]);
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(first.failed).toBe(1);
+    expect(second.failed).toBe(1);
+    // Playback is unaffected: the device voice takes over.
+    t.teacher.say({ text: "b", phase: "exercise" });
+    await t.flush();
+    expect(t.spoken).toEqual(["b"]);
   });
 });

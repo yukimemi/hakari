@@ -24,6 +24,7 @@ export const teacher = createTeacher({
     return Ctor ? (new Ctor() as unknown as AudioContextLike) : undefined;
   },
   generate: (phrases, signal) => api.generateSpeech(phrases, signal),
+  fetchProfile: (signal) => api.ttsProfile(signal).then((r) => r.profile),
   fallback: (text, onEnd) => speak(text, { ...options, onEnd }),
 });
 

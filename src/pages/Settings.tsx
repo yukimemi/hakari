@@ -6,7 +6,7 @@
 // vision-capable choices, so the failure "DeepSeek cannot see images" is
 // prevented in the UI instead of explained in an error.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, useUid } from "../auth/context";
 import { useSettings } from "../data/hooks";
@@ -151,7 +151,7 @@ function VoicePicker({
  *  place a request is awaited: it is a button the user pressed, not a
  *  workout beat. Without a server key it says so and plays the device
  *  voice, so the screen works either way. */
-function GeminiVoice({
+export function GeminiVoice({
   enabled,
   voiceName,
   pitch,
@@ -165,16 +165,29 @@ function GeminiVoice({
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => () => teacher.stop(), []);
+  // A preview still waiting on its request when the screen goes away must
+  // not start talking afterwards.
+  const pending = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      pending.current?.abort();
+      teacher.stop();
+    },
+    [],
+  );
 
   const preview = async () => {
     const text = "こんにちは。今日も一緒にがんばりましょう！";
+    pending.current?.abort();
+    const controller = new AbortController();
+    pending.current = controller;
     setBusy(true);
     setNote(null);
     teacher.setGeminiEnabled(true);
     setFallbackVoice({ voiceName, pitch });
     await teacher.unlock();
-    const { failed } = await teacher.prefetch([{ text, phase: "exercise" }]);
+    const { failed } = await teacher.prefetch([{ text, phase: "exercise" }], controller.signal);
+    if (controller.signal.aborted) return;
     if (failed) setNote("Gemini 音声を使えませんでした。端末の音声で再生します。");
     teacher.say({ text, phase: "exercise" });
     setBusy(false);
