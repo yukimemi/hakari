@@ -10,6 +10,7 @@ import {
   movingAverage,
   pace,
   projectGoalDate,
+  sessionKcal,
   tdee,
   toDateKey,
   trendSlope,
@@ -274,5 +275,72 @@ describe("toDateKey", () => {
     // 23:30 local must still be that local day, which a toISOString-based
     // implementation would get wrong east of UTC.
     expect(toDateKey(new Date(2026, 6, 15, 23, 30))).toBe("2026-07-15");
+  });
+});
+
+describe("sessionKcal", () => {
+  const w = { kg: 60, source: "latest" as const };
+
+  it("is METs x weight x active hours, labelled as an estimate with its basis", () => {
+    const r = sessionKcal({
+      items: [{ name: "スクワット", mets: 5, activeSec: 600 }],
+      weight: w,
+      rpe: 6,
+    });
+    expect(r.kcal).toBe(50); // 5 * 60 * 1/6
+    expect(r.basis).toMatch(/^推定/);
+    expect(r.basis).toContain("60kg");
+    expect(r.basis).toContain("休憩除く");
+    expect(r.missing).toEqual([]);
+  });
+
+  it("scales with reported effort and with easing off", () => {
+    const items = [{ name: "a", mets: 6, activeSec: 600 }];
+    const hard = sessionKcal({ items, weight: w, rpe: 9 }).kcal!;
+    const mid = sessionKcal({ items, weight: w, rpe: 6 }).kcal!;
+    const easy = sessionKcal({ items, weight: w, rpe: 2 }).kcal!;
+    expect(hard).toBeGreaterThan(mid);
+    expect(mid).toBeGreaterThan(easy);
+    expect(sessionKcal({ items, weight: w, reduced: true }).basis).toContain("軽め");
+  });
+
+  it("says when standard intensity was assumed", () => {
+    const r = sessionKcal({ items: [{ name: "a", mets: 6, activeSec: 600 }], weight: w });
+    expect(r.basis).toContain("標準強度を仮定");
+  });
+
+  it("names the starting weight when no weigh-in exists", () => {
+    const r = sessionKcal({
+      items: [{ name: "a", mets: 6, activeSec: 600 }],
+      weight: { kg: 70, source: "start" },
+    });
+    expect(r.basis).toContain("開始時の体重");
+  });
+
+  it("returns no number, and says what is missing, instead of inventing a weight", () => {
+    const r = sessionKcal({ items: [{ name: "a", mets: 6, activeSec: 600 }] });
+    expect(r.kcal).toBeNull();
+    expect(r.missing).toContain("体重");
+    expect(r.basis).toContain("体重");
+  });
+
+  it("leaves out an exercise with no METs and flags it", () => {
+    const r = sessionKcal({
+      items: [
+        { name: "a", mets: 6, activeSec: 600 },
+        { name: "謎の動き", activeSec: 600 },
+      ],
+      weight: w,
+      rpe: 6,
+    });
+    expect(r.kcal).toBe(60);
+    expect(r.missing.join()).toContain("謎の動き");
+    expect(r.basis).toContain("除外");
+  });
+
+  it("does not count time that was not spent exercising", () => {
+    const r = sessionKcal({ items: [{ name: "a", mets: 6, activeSec: 0 }], weight: w });
+    expect(r.kcal).toBeNull();
+    expect(r.missing).toContain("運動時間");
   });
 });

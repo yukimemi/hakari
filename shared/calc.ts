@@ -270,3 +270,100 @@ export function minimumIntake(bmrValue: number, sex: Sex): number {
   const absoluteFloor = sex === "male" ? 1500 : 1200;
   return Math.max(absoluteFloor, bmrValue);
 }
+
+export type SessionKcalInput = {
+  /** One row per exercise done. `mets` is undefined for a movement that
+   *  is not in the catalogue, which leaves it out rather than guessing. */
+  items: { name: string; mets?: number; activeSec: number }[];
+  /** Absent when no valid weight is on record. `source` says which one
+   *  was used so the basis can say so. */
+  weight?: { kg: number; source: "latest" | "start" };
+  /** Self-reported effort, 1-10. */
+  rpe?: number;
+  /** The user eased off during the session. */
+  reduced?: boolean;
+};
+
+export type SessionKcal = {
+  /** Null when the inputs cannot support a number at all. */
+  kcal: number | null;
+  /** One line: what the number was built from, and what was assumed. */
+  basis: string;
+  /** Inputs that were absent, in words the UI can show as is. */
+  missing: string[];
+};
+
+/** Effort scaling. A self-reported RPE wins when given; otherwise easing
+ *  off mid-session is the only signal there is, and "standard" is a stated
+ *  assumption, not a measurement. */
+export function intensityFactor(opts: { rpe?: number; reduced?: boolean }): {
+  factor: number;
+  label: string;
+} {
+  if (opts.rpe !== undefined) {
+    if (opts.rpe <= 4) return { factor: 0.9, label: `きつさ ${opts.rpe}/10 (軽め)` };
+    if (opts.rpe >= 8) return { factor: 1.1, label: `きつさ ${opts.rpe}/10 (強め)` };
+    return { factor: 1, label: `きつさ ${opts.rpe}/10 (標準)` };
+  }
+  if (opts.reduced) return { factor: 0.85, label: "途中で軽くしたため軽め" };
+  return { factor: 1, label: "きつさの申告なし。標準強度を仮定" };
+}
+
+/**
+ * kcal for a guided session: METs x body weight x *active* hours x an
+ * effort factor. Rest and pauses never reach `activeSec`, so they are not
+ * burned here — the MET value already includes resting metabolism, and
+ * counting the breaks as exercise would be the larger error.
+ *
+ * Missing inputs are named in `missing` and `basis`, never filled in.
+ */
+export function sessionKcal(input: SessionKcalInput): SessionKcal {
+  const missing: string[] = [];
+  if (!input.weight || !(input.weight.kg > 0)) missing.push("体重");
+
+  const counted = input.items.filter(
+    (i) => i.mets !== undefined && i.activeSec > 0,
+  );
+  const skipped = input.items.filter(
+    (i) => i.mets === undefined && i.activeSec > 0,
+  );
+  if (skipped.length) {
+    missing.push(`${skipped.map((i) => i.name).join("・")}の運動強度(METs)`);
+  }
+  const totalSec = counted.reduce((sum, i) => sum + i.activeSec, 0);
+  if (!(totalSec > 0)) missing.push("運動時間");
+
+  if (!input.weight || !(input.weight.kg > 0) || !(totalSec > 0)) {
+    return {
+      kcal: null,
+      basis: `推定できません。足りない情報: ${missing.join("・")}`,
+      missing,
+    };
+  }
+
+  const { factor, label } = intensityFactor(input);
+  const base = counted.reduce(
+    (sum, i) =>
+      sum +
+      exerciseKcal({
+        mets: i.mets!,
+        weightKg: input.weight!.kg,
+        minutes: i.activeSec / 60,
+      }),
+    0,
+  );
+  const kcal = Math.round(base * factor);
+  const weightLabel =
+    input.weight.source === "latest"
+      ? `直近の体重 ${input.weight.kg}kg`
+      : `開始時の体重 ${input.weight.kg}kg (体重の記録なし)`;
+  const parts = [
+    "推定",
+    `METs × ${weightLabel} × 運動時間 ${(totalSec / 60).toFixed(1)}分 (休憩除く)`,
+    `強度: ${label}`,
+  ];
+  if (skipped.length) {
+    parts.push(`${skipped.map((i) => i.name).join("・")}はMETs不明のため除外`);
+  }
+  return { kcal, basis: parts.join(" / "), missing };
+}
