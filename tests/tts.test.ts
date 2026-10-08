@@ -113,8 +113,19 @@ describe("POST /api/tts", () => {
   it("draws on its own daily bucket and maps the limit", async () => {
     await POST(req(ok));
     expect(vi.mocked(consumeCall).mock.calls[0][2]).toMatchObject({ bucket: "tts" });
-    vi.mocked(consumeCall).mockRejectedValueOnce(new UsageError("上限"));
-    expect((await POST(req(ok))).status).toBe(429);
+    fetchMock.mockClear();
+    vi.mocked(consumeCall).mockRejectedValueOnce(new UsageError("上限", true));
+    const res = await POST(req(ok));
+    expect(res.status).toBe(429);
+    expect(((await res.json()) as { code: string }).code).toBe("limit");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps an accounting failure as a plain 429 without the limit code", async () => {
+    vi.mocked(consumeCall).mockRejectedValueOnce(new UsageError("確認できません"));
+    const res = await POST(req(ok));
+    expect(res.status).toBe(429);
+    expect(((await res.json()) as { code?: string }).code).toBeUndefined();
   });
 
   it("maps upstream failure without leaking the key", async () => {

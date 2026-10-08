@@ -18,9 +18,13 @@ import { AuthError } from "./auth.js";
 export class UsageError extends Error {
   readonly status = 429;
 
-  constructor(message: string) {
+  /** True only when the daily cap was hit, not when accounting failed. */
+  readonly exhausted: boolean;
+
+  constructor(message: string, exhausted = false) {
     super(message);
     this.name = "UsageError";
+    this.exhausted = exhausted;
   }
 }
 
@@ -97,6 +101,7 @@ export async function consumeCall(
         : opts.bucket === "tts"
           ? `今日の Gemini 音声の生成上限 (${limit} 回) に達しました。端末の音声で続けます。`
           : `今日の AI 呼び出し上限 (${limit} 回) に達しました。日付が変わると戻ります。`,
+      true,
     );
   }
 
