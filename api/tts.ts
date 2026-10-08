@@ -8,11 +8,12 @@
 import { TtsRequest, type TtsResponse } from "../shared/tts.js";
 import { json, readJson, route } from "./_lib/http.js";
 import { requireUser } from "./_lib/auth.js";
-import { consumeCall } from "./_lib/usage.js";
+import { consumeCall, UsageError } from "./_lib/usage.js";
 import {
   audioSeconds,
   requireTtsKey,
   synthesize,
+  TtsError,
   ttsConfig,
   ttsProfile,
 } from "./_lib/tts.js";
@@ -25,10 +26,19 @@ export const POST = route(async (request) => {
   const body = await readJson(request, TtsRequest);
   // Checked before counting, so a missing key costs the caller nothing.
   const key = requireTtsKey();
-  await consumeCall(user.uid, user.idToken, {
-    bucket: "tts",
-    limit: ttsConfig().dailyRequestLimit,
-  });
+  try {
+    await consumeCall(user.uid, user.idToken, {
+      bucket: "tts",
+      limit: ttsConfig().dailyRequestLimit,
+    });
+  } catch (err) {
+    // Only an exhausted quota is "limit", so the client stops asking; an
+    // accounting failure stays a plain 429 and may recover.
+    if (err instanceof UsageError && err.exhausted) {
+      throw new TtsError(err.message, "limit", 429);
+    }
+    throw err;
+  }
 
   // Identical lines in one request are generated once.
   const unique = [
