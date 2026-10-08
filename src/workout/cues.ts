@@ -172,3 +172,14 @@ export function closingFallback(f: ClosingFacts): { message: string; next: strin
         : "次回も今日くらいの量で、また顔を出してくださいね。";
   return { message: parts.join(""), next };
 }
+
+export type SceneRef = { phase: string; index: number };
+
+// True when the session has just moved into a set (from a rest, or straight
+// from one set to the next) and speech left over from the previous scene
+// should be dropped. The first set after check-in is excluded: its start cue
+// is spoken inside the tap that began the session and must not be cut.
+export function enteredNewSet(prev: SceneRef, next: SceneRef & { paused: boolean }): boolean {
+  if (next.phase !== "active" || next.paused) return false;
+  return prev.phase === "rest" || (prev.phase === "active" && prev.index !== next.index);
+}

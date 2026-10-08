@@ -35,12 +35,14 @@ import type {
 import { Alert, Button, Field, NumberInput, Panel, Reading, TextInput } from "../components/ui";
 import {
   closingFallback,
+  enteredNewSet,
   greeting,
   paceCue,
   restCue,
   startCue,
   toHistory,
   type ClosingFacts,
+  type SceneRef,
 } from "../workout/cues";
 import {
   buildSessionEntry,
@@ -228,6 +230,19 @@ export default function WorkoutSession({
   const step = set ? state.steps[set.stepIndex] : undefined;
   const paced = pacedReps(state);
   const left = secondsLeftInSet(state);
+
+  // Entering a new set cuts whatever the previous scene was still saying, so
+  // a long rest line cannot run into the next set. This must stay above the
+  // start-cue effect: effects run in declaration order, so the stale audio is
+  // dropped first and the new start cue is queued after it.
+  const prevScene = useRef<SceneRef>({ phase: state.phase, index: state.index });
+  useEffect(() => {
+    const prev = prevScene.current;
+    prevScene.current = { phase: state.phase, index: state.index };
+    if (geminiOn && enteredNewSet(prev, { phase: state.phase, index: state.index, paused: state.paused })) {
+      teacher.cancel();
+    }
+  }, [state.phase, state.index, state.paused, geminiOn]);
 
   useEffect(() => {
     if (state.phase !== "active" || state.paused || !set || !step) return;

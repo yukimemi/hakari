@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closingFallback, paceCue, restCue, startCue, toHistory, type ClosingFacts, type History } from "./cues";
+import { closingFallback, enteredNewSet, paceCue, restCue, startCue, toHistory, type ClosingFacts, type History } from "./cues";
 import type { StoredWorkout } from "../data/store";
 
 const none: History = { status: "ready", sessions: [], activeDays: 0 };
@@ -102,5 +102,21 @@ describe("closing", () => {
 
   it("gives a next-session prompt", () => {
     expect(closingFallback(facts({ rpe: 9 })).next).toContain("軽め");
+  });
+});
+
+describe("enteredNewSet", () => {
+  it("is true when a rest gives way to a set", () => {
+    expect(enteredNewSet({ phase: "rest", index: 0 }, { phase: "active", index: 1, paused: false })).toBe(true);
+  });
+  it("is true when a set follows a set with no rest", () => {
+    expect(enteredNewSet({ phase: "active", index: 0 }, { phase: "active", index: 1, paused: false })).toBe(true);
+  });
+  it("is false for the first set after check-in", () => {
+    expect(enteredNewSet({ phase: "checkin", index: 0 }, { phase: "active", index: 0, paused: false })).toBe(false);
+  });
+  it("is false while paused or when resuming the same set", () => {
+    expect(enteredNewSet({ phase: "rest", index: 0 }, { phase: "active", index: 1, paused: true })).toBe(false);
+    expect(enteredNewSet({ phase: "active", index: 1 }, { phase: "active", index: 1, paused: false })).toBe(false);
   });
 });
