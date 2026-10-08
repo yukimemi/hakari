@@ -36,6 +36,7 @@ import { Alert, Button, Field, NumberInput, Panel, Reading, TextInput } from "..
 import {
   closingFallback,
   enteredNewSet,
+  enteredRest,
   greeting,
   paceCue,
   restCue,
@@ -160,9 +161,10 @@ export default function WorkoutSession({
     return teacher.onSpeakingChange((on) => (on ? mixer.duck() : mixer.release()));
   }, [mixer, geminiOn]);
 
-  // Lines are generated while the user is still on the check-in screen and
-  // right after Start, never at the moment they are needed. Aborted when
-  // the session screen goes away.
+  // Lines for the chosen plan are generated right after Start, never at the
+  // moment they are needed, and only for that plan: every check-in tweak
+  // would otherwise buy a whole speculative set of lines. Aborted when the
+  // session screen goes away.
   const lifetime = useRef<AbortController | null>(null);
   useEffect(() => {
     lifetime.current = new AbortController();
@@ -231,16 +233,19 @@ export default function WorkoutSession({
   const paced = pacedReps(state);
   const left = secondsLeftInSet(state);
 
-  // Entering a new set cuts whatever the previous scene was still saying, so
-  // a long rest line cannot run into the next set. This must stay above the
-  // start-cue effect: effects run in declaration order, so the stale audio is
-  // dropped first and the new start cue is queued after it.
+  // A change of scene (into a set, or from a set into its rest) cuts whatever
+  // the previous scene was still saying, so a long rest line cannot delay or
+  // swallow the next set's cue. Closing words are not part of any scene and
+  // survive. This must stay above the cue effects: effects run in declaration
+  // order, so the stale audio is dropped first and the new cue is queued
+  // after it.
   const prevScene = useRef<SceneRef>({ phase: state.phase, index: state.index });
   useEffect(() => {
     const prev = prevScene.current;
     prevScene.current = { phase: state.phase, index: state.index };
-    if (geminiOn && enteredNewSet(prev, { phase: state.phase, index: state.index, paused: state.paused })) {
-      teacher.cancel();
+    const next = { phase: state.phase, index: state.index, paused: state.paused };
+    if (geminiOn && (enteredNewSet(prev, next) || enteredRest(prev, next))) {
+      teacher.interrupt();
     }
   }, [state.phase, state.index, state.paused, geminiOn]);
 
@@ -306,24 +311,25 @@ export default function WorkoutSession({
     }
   }, [state.paused, state.phase]);
 
-  // Check-in: once the plan has settled for a moment, warm the cache.
-  useEffect(() => {
-    if (state.phase !== "checkin") return;
-    const id = window.setTimeout(() => prefetchLines(plan.steps), 1000);
-    return () => window.clearTimeout(id);
-  }, [state.phase, plan.steps, prefetchLines]);
-
-  // Lifetime of the current closing speech; aborted on leaving or continuing.
+  // Closing words arrive asynchronously (save, model, prefetch). Each run of
+  // `finalise` owns an AbortController created before the save is awaited;
+  // stopping, leaving or continuing the workout aborts it, so an obsolete
+  // answer neither speaks nor overwrites what is on screen. The record
+  // itself is saved regardless.
   const closingRun = useRef<AbortController | null>(null);
+  const invalidateClosing = useCallback(() => {
+    closingRun.current?.abort();
+    closingRun.current = null;
+  }, []);
 
   useEffect(
     () => () => {
-      closingRun.current?.abort();
+      invalidateClosing();
       cancelSpeech();
       teacher.stop();
       mixer.dispose();
     },
-    [mixer],
+    [mixer, invalidateClosing],
   );
 
   // --- saving ------------------------------------------------------------
@@ -361,7 +367,9 @@ export default function WorkoutSession({
     async (s: typeof state, wantClosing: boolean) => {
       if (persisted.current) return;
       persisted.current = true;
-      closingRun.current?.abort();
+      // Created before the save is awaited: leaving during the save must also
+      // silence the words that follow it.
+      invalidateClosing();
       const run = new AbortController();
       closingRun.current = run;
       const stale = () => run.signal.aborted || stateRef.current.phase !== "done";
@@ -388,6 +396,7 @@ export default function WorkoutSession({
       }
       if (!wantClosing) return;
 
+      if (stale()) return;
       const facts = closingFacts(s);
       const fallback = closingFallback(facts);
       setClosing(fallback);
@@ -431,7 +440,7 @@ export default function WorkoutSession({
         say(`${fallback.message}${fallback.next}`, "closing");
       }
     },
-    [closingFacts, history, say, geminiOn, sessionId, settings.ai.coach, uid, weight],
+    [closingFacts, history, say, geminiOn, sessionId, settings.ai.coach, uid, weight, invalidateClosing],
   );
 
   // Deferred a tick so the saving state is not set inside the effect body;
@@ -481,6 +490,7 @@ export default function WorkoutSession({
   };
 
   const stop = () => {
+    invalidateClosing();
     cancelSpeech();
     teacher.stop();
     dispatch({ type: "stop", now: Date.now() });
@@ -908,9 +918,10 @@ export default function WorkoutSession({
               size="lg"
               onClick={() => {
                 persisted.current = false;
-                closingRun.current?.abort();
+                invalidateClosing();
                 cancelSpeech();
                 teacher.stop();
+                setClosing(null);
                 dispatch({ type: "continue", now: Date.now() });
               }}
             >

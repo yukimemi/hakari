@@ -10,7 +10,14 @@
 // Overlap rules: a count cuts whatever is playing (a stale "7" is worse
 // than silence) and drops queued counts; everything else queues, and a line
 // whose moment has passed is discarded instead of read late. stop()/pause()
-// bump an epoch, so audio decoded after the stop is thrown away.
+// bump an epoch, so audio decoded after the stop is thrown away. interrupt()
+// is the scoped form for scene changes: it drops everything except closing
+// words, which belong to the session's end rather than to a scene.
+//
+// Cached audio is only trusted once the server's voice profile has been
+// confirmed this session (see `refreshProfile`); until then, and if the
+// confirmation cannot be had, lines are spoken by the device voice or by
+// the profile the browser already knew.
 
 import {
   TTS_MAX_CHARS,
@@ -58,6 +65,9 @@ export type TeacherDeps = {
   store: TtsStore;
   audioContext: () => AudioContextLike | undefined;
   generate: (phrases: TtsPhrase[], signal?: AbortSignal) => Promise<TtsResponse>;
+  /** Current server voice profile. Optional: without it the stored profile
+   *  is trusted as is. */
+  fetchProfile?: (signal?: AbortSignal) => Promise<string>;
   /** Device voice, used whenever Gemini audio is not ready. */
   fallback: (text: string, onEnd: () => void) => SpeechHandle;
   now?: () => number;
@@ -105,6 +115,26 @@ export function createTeacher(deps: TeacherDeps) {
   const listeners = new Set<(speaking: boolean) => void>();
   const decoded = new Map<string, { duration: number }>();
   const inflight = new Map<string, Promise<void>>();
+  // The profile is confirmed once per session. A failed check keeps the
+  // stored profile, so a flaky network does not cost the whole session its
+  // Gemini voice.
+  let profileChecked = !deps.fetchProfile;
+  let profileCheck: Promise<void> | undefined;
+
+  const refreshProfile = (): Promise<void> => {
+    if (profileChecked) return Promise.resolve();
+    profileCheck ??= (async () => {
+      try {
+        const profile = await deps.fetchProfile!();
+        if (profile) store.setProfile(profile);
+      } catch (err) {
+        if ((err as { code?: TtsErrorCode }).code === "not_configured") unavailable = true;
+      } finally {
+        profileChecked = true;
+      }
+    })();
+    return profileCheck;
+  };
 
   const context = () => {
     if (!ctx) {
@@ -126,6 +156,7 @@ export function createTeacher(deps: TeacherDeps) {
   };
 
   const keyFor = (cue: Pick<Cue, "text" | "phase">) => {
+    if (!profileChecked) return undefined;
     const profile = store.profile();
     return profile ? hashKey(profile, cue.phase, cue.text) : undefined;
   };
@@ -156,6 +187,7 @@ export function createTeacher(deps: TeacherDeps) {
       };
     };
 
+    if (geminiOn && !profileChecked) void refreshProfile();
     const key = geminiOn && !unavailable ? keyFor(item.cue) : undefined;
     const audio = context();
     // A context that never got its user-gesture resume() would hold the
@@ -268,6 +300,21 @@ export function createTeacher(deps: TeacherDeps) {
       };
     },
 
+    /** Scene change: drops queued and playing lines except closing words.
+     *  Unlike stop(), a closing line that is already queued, being decoded
+     *  or playing carries on. */
+    interrupt() {
+      queue = queue.filter((q) => {
+        if (q.kind === "closing") return true;
+        q.done = true;
+        return false;
+      });
+      if (current && current.kind !== "closing") current.stop?.();
+    },
+
+    /** Confirms the server's voice profile (once per session). */
+    refreshProfile,
+
     /** Drops everything queued and playing. Anything still being decoded
      *  or fetched is ignored when it arrives. */
     stop: halt,
@@ -289,6 +336,7 @@ export function createTeacher(deps: TeacherDeps) {
       phrases: Prefetchable[],
       signal?: AbortSignal,
     ): Promise<{ cached: number; failed: number }> {
+      await refreshProfile();
       const wanted = new Map<string, Prefetchable>();
       for (const p of phrases) wanted.set(`${p.phase}\n${p.text}`, p);
 
