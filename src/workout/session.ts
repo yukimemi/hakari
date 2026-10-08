@@ -99,12 +99,13 @@ export function defaultMenu(equipment: Equipment[]): PlanExercise[] {
   return picked;
 }
 
-/** Rough wall-clock for one pass over the steps. */
+/** Rough wall-clock for one pass over the steps. A rest follows every set
+ *  but the very last, so rests between exercises count too. */
 export function estimateSeconds(steps: Step[]): number {
-  return steps.reduce(
-    (sum, s) => sum + s.sets * amountSeconds(s.amount) + (s.sets - 1) * s.restSec,
-    0,
-  );
+  const work = steps.reduce((sum, s) => sum + s.sets * amountSeconds(s.amount), 0);
+  const rest = steps.reduce((sum, s) => sum + s.sets * s.restSec, 0);
+  const last = steps.at(-1);
+  return work + rest - (last ? last.restSec : 0);
 }
 
 function scaleAmount(a: Amount, factor: number): Amount {

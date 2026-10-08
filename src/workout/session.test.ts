@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   currentSet,
+  estimateSeconds,
   initialState,
   pacedReps,
   parseAmount,
@@ -75,6 +76,24 @@ describe("planSession", () => {
     const p = planSession(odd, {}, { squat: { kind: "reps", count: 10 } });
     expect(p.unresolved).toHaveLength(0);
     expect(p.steps).toHaveLength(1);
+  });
+});
+
+describe("estimateSeconds", () => {
+  it("counts the rests between exercises, not only between sets", () => {
+    const steps = planSession(
+      [ex("squat", 1, "20回", 90), ex("pushup", 1, "20回", 90), ex("plank", 1, "60秒", 90)],
+      {},
+    ).steps;
+    // 60 + 60 + 60 of work, 90 + 90 of rest (none after the last set)
+    expect(estimateSeconds(steps)).toBe(360);
+  });
+
+  it("trims to a budget using that estimate", () => {
+    const menu = [ex("squat", 1, "20回", 90), ex("pushup", 1, "20回", 90), ex("plank", 1, "60秒", 90)];
+    const p = planSession(menu, { minutes: 5 });
+    expect(estimateSeconds(p.steps)).toBeLessThanOrEqual(300);
+    expect(p.steps.length).toBeLessThan(3);
   });
 });
 
