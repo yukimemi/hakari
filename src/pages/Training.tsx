@@ -1,6 +1,6 @@
 // Training screen: generate a week, then have the avatar demonstrate.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSubView } from "../lib/subview";
 import { useAuth, useUid } from "../auth/context";
 import { useSettings, useUserDoc, useWeights } from "../data/hooks";
@@ -9,6 +9,12 @@ import AvatarStage from "../avatar/AvatarStage";
 import { MOTIONS } from "../avatar/procedural";
 import { shapeFromBmi } from "../avatar/bodyShape";
 import { speak, cancelSpeech, speechSupported } from "../speech/speak";
+import {
+  closingLine,
+  introLine,
+  setFallbackVoice,
+  teacher,
+} from "../speech/gemini";
 import {
   Alert,
   Button,
@@ -93,6 +99,26 @@ export default function Training() {
     }
   };
 
+  // Generate the exercise intro lines while the menu is on screen, long
+  // before anyone taps an exercise. A guided session warms its own cues
+  // (see WorkoutSession). Playback never waits on this: a line that is not
+  // cached yet is simply spoken by the device voice.
+  const geminiVoice = settings.voiceEnabled && settings.geminiVoiceEnabled;
+  useEffect(() => {
+    teacher.setGeminiEnabled(geminiVoice);
+    if (!geminiVoice || !plan) return;
+    const controller = new AbortController();
+    const exercises = plan.days.flatMap((d) => d.exercises);
+    void teacher.prefetch(
+      exercises.map((e) => ({
+        text: introLine(e),
+        phase: "exercise" as const,
+      })),
+      controller.signal,
+    );
+    return () => controller.abort();
+  }, [geminiVoice, plan]);
+
   if (sessionView.value !== null) {
     const day = plan?.days[Number(sessionView.value)];
     return (
@@ -122,6 +148,7 @@ export default function Training() {
         voiceEnabled={settings.voiceEnabled}
         voiceName={settings.voiceName}
         voicePitch={settings.voicePitch}
+        geminiVoice={geminiVoice}
         clipSubject={settings.clipSubject}
         weightKg={currentKg}
         onClose={demoView.close}
@@ -217,7 +244,11 @@ export default function Training() {
             {day.exercises.map((exercise, i) => (
               <li key={i}>
                 <button
-                  onClick={() => demoView.open(`${index}.${exercise.id}`)}
+                  onClick={() => {
+                    // iOS starts audio only from a tap, so unlock here.
+                    void teacher.unlock();
+                    demoView.open(`${index}.${exercise.id}`);
+                  }}
                   className="flex w-full items-center justify-between gap-3 py-3 text-left hover:opacity-80"
                 >
                   <div className="min-w-0">
@@ -251,6 +282,7 @@ function Demonstration({
   voiceEnabled,
   voiceName,
   voicePitch,
+  geminiVoice,
   clipSubject,
   weightKg,
   onClose,
@@ -262,6 +294,7 @@ function Demonstration({
   voiceEnabled: boolean;
   voiceName?: string;
   voicePitch: number;
+  geminiVoice: boolean;
   clipSubject: string;
   weightKg: number;
   onClose: () => void;
@@ -279,16 +312,50 @@ function Demonstration({
   }, []);
 
   // Speak the cue once on open. Repeating it every loop would be noise.
+  // With Gemini on, the cached audio plays if it is ready; otherwise the
+  // teacher falls back to the device voice by itself.
+  const finished = useRef(false);
   useEffect(() => {
     if (!voiceEnabled || !speechSupported()) return;
-    const handle = speak(
-      `${exercise.name}。${exercise.sets}セット、${exercise.reps}。${exercise.cue}`,
-      { voiceName, pitch: voicePitch },
-    );
+    setFallbackVoice({ voiceName, pitch: voicePitch });
+    if (!geminiVoice) {
+      const handle = speak(
+        `${exercise.name}。${exercise.sets}セット、${exercise.reps}。${exercise.cue}`,
+        { voiceName, pitch: voicePitch },
+      );
+      return () => handle.cancel();
+    }
+    const handle = teacher.say({
+      text: introLine(exercise),
+      phase: "exercise",
+      kind: "cue",
+    });
     return () => handle.cancel();
-  }, [exercise, voiceEnabled, voiceName, voicePitch]);
+  }, [exercise, voiceEnabled, voiceName, voicePitch, geminiVoice]);
 
-  useEffect(() => cancelSpeech, []);
+  // Personal closing line, generated while the exercise is under way so it
+  // is cached by the time the button is pressed. It holds only facts that
+  // cannot change before then, so what is played is never stale.
+  useEffect(() => {
+    if (!voiceEnabled || !geminiVoice) return;
+    const controller = new AbortController();
+    void teacher.prefetch(
+      [{ text: closingLine(exercise.name), phase: "closing", personal: true }],
+      controller.signal,
+    );
+    return () => controller.abort();
+  }, [exercise.name, voiceEnabled, geminiVoice]);
+
+  // Leaving mid-exercise silences everything; leaving by completing lets
+  // the closing line finish.
+  useEffect(
+    () => () => {
+      if (finished.current) return;
+      cancelSpeech();
+      teacher.stop();
+    },
+    [],
+  );
 
   const { user } = useAuth();
   const owner = isOwner(user?.email);
@@ -363,7 +430,14 @@ function Demonstration({
         )}
 
         <div className="mt-3 flex items-center gap-2">
-          <Button onClick={() => setPaused((p) => !p)}>
+          <Button
+            onClick={() => {
+              // A pause drops pending speech instead of letting it play
+              // over a frozen exercise; nothing replays on resume.
+              if (!paused) teacher.pause();
+              setPaused((p) => !p);
+            }}
+          >
             {paused ? "再生" : "一時停止"}
           </Button>
           <div className="flex flex-1 items-center gap-2">
@@ -419,6 +493,13 @@ function Demonstration({
             loading={saving}
             onClick={async () => {
               setSaving(true);
+              if (voiceEnabled && geminiVoice) {
+                finished.current = true;
+                teacher.say({
+                  text: closingLine(exercise.name),
+                  phase: "closing",
+                });
+              }
               await onComplete(minutes, kcal);
             }}
           >

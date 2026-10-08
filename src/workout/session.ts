@@ -259,7 +259,7 @@ export function initialState(): SessionState {
   };
 }
 
-function flatten(steps: Step[]): PlannedSet[] {
+export function flatten(steps: Step[]): PlannedSet[] {
   return steps.flatMap((step, stepIndex) =>
     Array.from({ length: step.sets }, (_, i) => ({
       stepIndex,

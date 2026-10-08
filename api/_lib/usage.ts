@@ -94,7 +94,9 @@ export async function consumeCall(
     throw new UsageError(
       opts.bucket === "clip"
         ? `今日の動画生成の上限 (${limit} 本) に達しました。日付が変わると戻ります。`
-        : `今日の AI 呼び出し上限 (${limit} 回) に達しました。日付が変わると戻ります。`,
+        : opts.bucket === "tts"
+          ? `今日の Gemini 音声の生成上限 (${limit} 回) に達しました。端末の音声で続けます。`
+          : `今日の AI 呼び出し上限 (${limit} 回) に達しました。日付が変わると戻ります。`,
     );
   }
 

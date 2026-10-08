@@ -19,6 +19,9 @@ import { saveWorkout } from "../data/store";
 import AvatarStage from "../avatar/AvatarStage";
 import { Mixer, speakDucked } from "../audio/mixer";
 import { cancelSpeech, speechSupported } from "../speech/speak";
+import { setFallbackVoice, teacher } from "../speech/gemini";
+import { sessionPhrases } from "../speech/sessionLines";
+import type { TtsPhase } from "../../shared/tts";
 import { useWakeLock } from "../lib/wakeLock";
 import { api } from "../lib/api";
 import { formatKcal } from "../lib/format";
@@ -126,17 +129,50 @@ export default function WorkoutSession({
   const running = state.phase === "active" || state.phase === "rest";
   useWakeLock(running);
 
+  // Gemini speech is opt-in and needs a server key; either way the same
+  // `say` is used, and a line that is not cached (or any failure) is spoken
+  // by the device voice inside the teacher.
+  const geminiOn = voiceOk && settings.geminiVoiceEnabled;
+
   const say = useCallback(
-    (text: string) => {
+    (text: string, phase: TtsPhase = "exercise", expiresMs?: number) => {
       setCaption(text);
-      if (voiceOk) {
+      if (!voiceOk) return;
+      if (geminiOn) {
+        setFallbackVoice({ voiceName: settings.voiceName, pitch: settings.voicePitch });
+        teacher.say({ text, phase, expiresMs });
+      } else {
         speakDucked(mixer, text, {
           voiceName: settings.voiceName,
           pitch: settings.voicePitch,
         });
       }
     },
-    [mixer, settings.voiceName, settings.voicePitch, voiceOk],
+    [mixer, settings.voiceName, settings.voicePitch, voiceOk, geminiOn],
+  );
+
+  // The teacher reports when speech starts and ends (idle edges only), and
+  // the mixer's counted duck/release turns that into lowered music.
+  useEffect(() => {
+    teacher.setGeminiEnabled(geminiOn);
+    return teacher.onSpeakingChange((on) => (on ? mixer.duck() : mixer.release()));
+  }, [mixer, geminiOn]);
+
+  // Lines are generated while the user is still on the check-in screen and
+  // right after Start, never at the moment they are needed. Aborted when
+  // the session screen goes away.
+  const lifetime = useRef<AbortController | null>(null);
+  useEffect(() => {
+    lifetime.current = new AbortController();
+    const controller = lifetime.current;
+    return () => controller.abort();
+  }, []);
+  const prefetchLines = useCallback(
+    (steps: Parameters<typeof sessionPhrases>[0]) => {
+      if (!geminiOn || history.status !== "ready") return;
+      void teacher.prefetch(sessionPhrases(steps, history), lifetime.current?.signal);
+    },
+    [geminiOn, history],
   );
 
   // --- check-in ----------------------------------------------------------
@@ -180,10 +216,10 @@ export default function WorkoutSession({
 
   const spoken = useRef(new Set<string>());
   const once = useCallback(
-    (key: string, text: string) => {
+    (key: string, text: string, phase: TtsPhase = "exercise", expiresMs?: number) => {
       if (spoken.current.has(key)) return;
       spoken.current.add(key);
-      say(text);
+      say(text, phase, expiresMs);
     },
     [say],
   );
@@ -201,7 +237,7 @@ export default function WorkoutSession({
   useEffect(() => {
     if (state.phase !== "active" || state.paused || !set) return;
     const cue = paceCue(set, paced, left);
-    if (cue) once(`pace:${state.index}:${cue.id}`, cue.text);
+    if (cue) once(`pace:${state.index}:${cue.id}`, cue.text, "exercise", 3000);
   }, [state.phase, state.paused, state.index, set, paced, left, once]);
 
   // Timed sets end themselves; rep sets wait for the user to say so.
@@ -223,6 +259,7 @@ export default function WorkoutSession({
         reduced: state.reduced,
         history,
       }),
+      "rest",
     );
   }, [state.phase, state.paused, state.index, state.results.length, state.queue.length, state.reduced, history, once]);
 
@@ -237,6 +274,7 @@ export default function WorkoutSession({
         reduced: state.reduced,
         history,
       }),
+      "rest",
     );
   }, [lastRpe, state.phase, state.index, state.results.length, state.queue.length, state.reduced, history, once]);
 
@@ -247,12 +285,23 @@ export default function WorkoutSession({
   }, [state.phase, state.paused, mixer]);
 
   useEffect(() => {
-    if (state.paused || state.phase === "done") cancelSpeech();
+    if (state.paused || state.phase === "done") {
+      cancelSpeech();
+      teacher.pause();
+    }
   }, [state.paused, state.phase]);
+
+  // Check-in: once the plan has settled for a moment, warm the cache.
+  useEffect(() => {
+    if (state.phase !== "checkin") return;
+    const id = window.setTimeout(() => prefetchLines(plan.steps), 1000);
+    return () => window.clearTimeout(id);
+  }, [state.phase, plan.steps, prefetchLines]);
 
   useEffect(
     () => () => {
       cancelSpeech();
+      teacher.stop();
       mixer.dispose();
     },
     [mixer],
@@ -337,13 +386,23 @@ export default function WorkoutSession({
           activeDays: history.status === "ready" ? history.activeDays : undefined,
         });
         setClosing(res.closing);
-        say(`${res.closing.message}${res.closing.next}`);
+        const spokenClosing = `${res.closing.message}${res.closing.next}`;
+        if (geminiOn) {
+          // The only line that cannot be known before the session ends.
+          // The workout is over and saved, so a short wait here costs no
+          // timing; past the deadline the device voice speaks it instead.
+          await Promise.race([
+            teacher.prefetch([{ text: spokenClosing, phase: "closing", personal: true }]),
+            new Promise((resolve) => window.setTimeout(resolve, 8000)),
+          ]);
+        }
+        say(spokenClosing, "closing");
       } catch {
         // The template was built from the same facts; it is already on screen.
-        say(`${fallback.message}${fallback.next}`);
+        say(`${fallback.message}${fallback.next}`, "closing");
       }
     },
-    [closingFacts, history, say, sessionId, settings.ai.coach, uid, weight],
+    [closingFacts, history, say, geminiOn, sessionId, settings.ai.coach, uid, weight],
   );
 
   // Deferred a tick so the saving state is not set inside the effect body;
@@ -373,7 +432,9 @@ export default function WorkoutSession({
     // Inside the tap: this is what lets audio and speech start at all on
     // iOS, so both are touched here and not from an effect.
     mixer.unlock();
+    void teacher.unlock();
     mixer.setEnabled(musicOn);
+    prefetchLines(plan.steps);
     const first = plan.steps[0];
     if (first) {
       const firstSet = { stepIndex: 0, setNo: 1, setsOfStep: first.sets, amount: first.amount };
@@ -392,6 +453,7 @@ export default function WorkoutSession({
 
   const stop = () => {
     cancelSpeech();
+    teacher.stop();
     dispatch({ type: "stop", now: Date.now() });
   };
 
