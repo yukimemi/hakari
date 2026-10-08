@@ -92,7 +92,7 @@ describe("POST /api/tts", () => {
   it.each([
     ["empty list", { phrases: [] }],
     ["too many phrases", { phrases: Array(7).fill(ok.phrases[0]) }],
-    ["over the phase limit", { phrases: [{ text: "あ".repeat(81), phase: "exercise" }] }],
+    ["over the phase limit", { phrases: [{ text: "あ".repeat(121), phase: "exercise" }] }],
     ["unknown phase", { phrases: [{ text: "あ", phase: "x" }] }],
     ["over total chars", { phrases: Array(5).fill({ text: "あ".repeat(100), phase: "rest" }) }],
   ])("rejects %s without spending anything", async (_n, body) => {

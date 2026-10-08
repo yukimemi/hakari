@@ -97,6 +97,26 @@ export const WorkoutEntry = z.object({
   reps: z.string().max(50).optional(),
   kcalBurned: z.number().min(0).max(5000),
   note: z.string().max(500).optional(),
+  // The fields below exist only on entries written by a guided session
+  // (`source: "session"`). Records from before it, and every hand-typed
+  // one, simply lack them, so each stays optional.
+  source: z.literal("session").optional(),
+  /** Doubles as the document id, which is what makes saving idempotent. */
+  sessionId: z.string().max(80).optional(),
+  /** `light` when the user asked to ease off mid-session or it was planned
+   *  that way; absent means the session ran as planned. */
+  intensity: z.enum(["light", "standard"]).optional(),
+  /** Self-reported effort, 1 (easy) .. 10 (hardest). Never inferred. */
+  rpe: z.number().min(1).max(10).optional(),
+  /** Energy the user reported before starting. Absent = not answered. */
+  energy: z.enum(["low", "ok", "high"]).optional(),
+  /** True when the session was ended before the plan was finished. */
+  stoppedEarly: z.boolean().optional(),
+  /** What the number in `kcalBurned` was derived from, one line. Kept
+   *  after the user corrects the value so the original basis stays. */
+  kcalBasis: z.string().max(300).optional(),
+  /** The estimate as first computed; `kcalBurned` differs once corrected. */
+  kcalEstimated: z.number().min(0).max(5000).optional(),
 });
 export type WorkoutEntry = z.infer<typeof WorkoutEntry>;
 
@@ -205,6 +225,15 @@ export const CoachComment = z.object({
 });
 export type CoachComment = z.infer<typeof CoachComment>;
 
+/** The teacher's closing words after a guided session. */
+export const WorkoutClosing = z.object({
+  message: z
+    .string()
+    .describe("今日のセッションへの締めの一言。出席・調整・記録上の変化を踏まえる。100字以内"),
+  next: z.string().describe("次回への短い一言。40字以内"),
+});
+export type WorkoutClosing = z.infer<typeof WorkoutClosing>;
+
 /** A custom exercise has no METs constant to look up (`shared/exercises.ts`
  *  only covers the fixed catalogue), so this is what backs the "AI で計算"
  *  button on a free-input workout-log entry. */
@@ -261,6 +290,8 @@ export const Settings = z.object({
   voiceName: z.string().optional(),
   /** 0.5 (low) .. 2 (high). */
   voicePitch: z.number().min(0.5).max(2).default(1.35),
+  /** Background music during a guided workout. */
+  musicEnabled: z.boolean().default(true),
   /** Who appears in a generated demonstration clip, in English, because
    *  that is what Veo reads best. Kept short: long prompts get caught by
    *  its filter. */
@@ -291,5 +322,6 @@ export const DEFAULT_SETTINGS: Settings = {
   voiceEnabled: true,
   geminiVoiceEnabled: false,
   voicePitch: 1.35,
+  musicEnabled: true,
   clipSubject: DEFAULT_CLIP_SUBJECT,
 };

@@ -11,6 +11,7 @@ import type {
   ExerciseBurn,
   MealAnalysis,
   TaskAssignment,
+  WorkoutClosing,
   WorkoutPlan,
 } from "../../shared/schema";
 import type { ProviderId } from "../../shared/providers";
@@ -235,6 +236,29 @@ export const api = {
   }): Promise<{ estimate: ExerciseBurn; provider: ProviderId; model: string }> {
     const { assignment, ...rest } = args;
     return call("/api/exercise-kcal", {
+      method: "POST",
+      body: { provider: assignment.provider, model: assignment.model, ...rest },
+    });
+  },
+
+  workoutCoach(args: {
+    assignment: TaskAssignment;
+    setsDone: number;
+    setsPlanned: number;
+    activeMin: number;
+    exercises: string[];
+    stoppedEarly: boolean;
+    reduced: boolean;
+    oneSet: boolean;
+    energy?: "low" | "ok" | "high";
+    rpe?: number;
+    adjustments: string[];
+    historyKnown: boolean;
+    past: { date: string; sets?: number; rpe?: number; stoppedEarly?: boolean }[];
+    activeDays?: number;
+  }): Promise<{ closing: WorkoutClosing; provider: ProviderId; model: string }> {
+    const { assignment, ...rest } = args;
+    return call("/api/workout-coach", {
       method: "POST",
       body: { provider: assignment.provider, model: assignment.model, ...rest },
     });

@@ -452,6 +452,16 @@ export default function SettingsPage() {
             />
           </label>
 
+          <label className="flex items-center justify-between gap-3">
+            <span className="text-sm">先生と運動するとき音楽を流す</span>
+            <input
+              type="checkbox"
+              checked={draft.musicEnabled}
+              onChange={(e) => update({ musicEnabled: e.target.checked })}
+              className="h-5 w-5 accent-[color:var(--needle)]"
+            />
+          </label>
+
           {draft.voiceEnabled && (
             <GeminiVoice
               enabled={draft.geminiVoiceEnabled}

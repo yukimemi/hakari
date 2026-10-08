@@ -77,6 +77,10 @@ export function speak(
      *  guess for this device when absent or no longer installed. */
     voiceName?: string;
     onLevel?: (level: number) => void;
+    /** Speech actually began. Not called when it never does. */
+    onStart?: () => void;
+    /** Called exactly once, however speech ends: finished, failed,
+     *  cancelled, or never reported finishing (see `maxSpeechMs`). */
     onEnd?: () => void;
   } = {},
 ): SpeechHandle {
@@ -115,23 +119,39 @@ export function speak(
     }, 60);
   }
 
-  utterance.onend = () => {
+  // Several browsers occasionally never fire `end` (a voice that fails to
+  // load, a tab backgrounded mid-sentence). Anything waiting on it — the
+  // music held down while the teacher talks — would wait forever, so a
+  // ceiling derived from the length of the text ends it regardless.
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    window.clearTimeout(watchdog);
     stopLevel();
     options.onEnd?.();
   };
-  utterance.onerror = () => {
-    stopLevel();
-    options.onEnd?.();
-  };
+
+  utterance.onstart = () => options.onStart?.();
+  utterance.onend = finish;
+  utterance.onerror = finish;
+  const watchdog = window.setTimeout(finish, maxSpeechMs(text, utterance.rate));
 
   window.speechSynthesis.speak(utterance);
 
   return {
     cancel: () => {
-      stopLevel();
       window.speechSynthesis.cancel();
+      finish();
     },
   };
+}
+
+/** Upper bound on how long `text` can plausibly take to say. Japanese
+ *  runs at roughly 6-8 characters a second at normal rate; this assumes
+ *  half that, plus slack for the voice to start. */
+export function maxSpeechMs(text: string, rate = 1): number {
+  return Math.round((text.length * 350) / Math.max(0.5, rate)) + 3000;
 }
 
 export function cancelSpeech(): void {

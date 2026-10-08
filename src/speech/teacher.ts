@@ -13,6 +13,7 @@
 // bump an epoch, so audio decoded after the stop is thrown away.
 
 import {
+  TTS_MAX_CHARS,
   TTS_MAX_PHRASES,
   TTS_MAX_TOTAL_CHARS,
   type TtsErrorCode,
@@ -291,12 +292,17 @@ export function createTeacher(deps: TeacherDeps) {
       const wanted = new Map<string, Prefetchable>();
       for (const p of phrases) wanted.set(`${p.phase}\n${p.text}`, p);
 
+      // A line over its phase limit would be refused by the server; it is
+      // simply left to the device voice.
+      const tooLong = [...wanted.values()].filter((p) => p.text.length > TTS_MAX_CHARS[p.phase]);
+      for (const p of tooLong) wanted.delete(`${p.phase}\n${p.text}`);
+
       const missing = [...wanted.values()].filter((p) => {
         const key = keyFor(p);
         return !(key && store.has(key));
       });
       let cached = wanted.size - missing.length;
-      let failed = 0;
+      let failed = tooLong.length;
 
       const chunks: Prefetchable[][] = [];
       let chunk: Prefetchable[] = [];

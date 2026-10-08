@@ -11,9 +11,9 @@ export type TtsPhase = (typeof TTS_PHASES)[number];
  *  inside the beat it belongs to is no use, and characters are what the
  *  provider bills. */
 export const TTS_MAX_CHARS: Record<TtsPhase, number> = {
-  exercise: 80,
-  rest: 80,
-  closing: 200,
+  exercise: 120,
+  rest: 120,
+  closing: 300,
 };
 
 /** Phrases per request. Together with `TTS_MAX_AUDIO_BYTES` this keeps the
