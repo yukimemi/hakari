@@ -313,8 +313,12 @@ export default function WorkoutSession({
     return () => window.clearTimeout(id);
   }, [state.phase, plan.steps, prefetchLines]);
 
+  // Lifetime of the current closing speech; aborted on leaving or continuing.
+  const closingRun = useRef<AbortController | null>(null);
+
   useEffect(
     () => () => {
+      closingRun.current?.abort();
       cancelSpeech();
       teacher.stop();
       mixer.dispose();
@@ -357,6 +361,10 @@ export default function WorkoutSession({
     async (s: typeof state, wantClosing: boolean) => {
       if (persisted.current) return;
       persisted.current = true;
+      closingRun.current?.abort();
+      const run = new AbortController();
+      closingRun.current = run;
+      const stale = () => run.signal.aborted || stateRef.current.phase !== "done";
       const built = buildSessionEntry({
         state: s,
         sessionId,
@@ -400,6 +408,7 @@ export default function WorkoutSession({
           past: history.status === "ready" ? history.sessions.slice(0, 3) : [],
           activeDays: history.status === "ready" ? history.activeDays : undefined,
         });
+        if (stale()) return;
         setClosing(res.closing);
         const spokenClosing = `${res.closing.message}${res.closing.next}`;
         if (geminiOn) {
@@ -407,12 +416,17 @@ export default function WorkoutSession({
           // The workout is over and saved, so a short wait here costs no
           // timing; past the deadline the device voice speaks it instead.
           await Promise.race([
-            teacher.prefetch([{ text: spokenClosing, phase: "closing", personal: true }]),
+            teacher.prefetch(
+              [{ text: spokenClosing, phase: "closing", personal: true }],
+              run.signal,
+            ),
             new Promise((resolve) => window.setTimeout(resolve, 8000)),
           ]);
         }
+        if (stale()) return;
         say(spokenClosing, "closing");
       } catch {
+        if (stale()) return;
         // The template was built from the same facts; it is already on screen.
         say(`${fallback.message}${fallback.next}`, "closing");
       }
@@ -894,6 +908,9 @@ export default function WorkoutSession({
               size="lg"
               onClick={() => {
                 persisted.current = false;
+                closingRun.current?.abort();
+                cancelSpeech();
+                teacher.stop();
                 dispatch({ type: "continue", now: Date.now() });
               }}
             >
