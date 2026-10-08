@@ -252,6 +252,10 @@ export const Settings = z.object({
    *  user uploaded themselves. */
   avatarSrc: z.string().default("/avatars/trainer.vrm"),
   voiceEnabled: z.boolean().default(true),
+  /** Use Gemini speech for the teacher when the server has a key. Off by
+   *  default because every first-time line is a billed generation; the
+   *  device voice keeps working either way. */
+  geminiVoiceEnabled: z.boolean().default(false),
   /** Exact name of the speech-synthesis voice to use. Device-specific, so
    *  an unknown one simply falls back to the best available. */
   voiceName: z.string().optional(),
@@ -285,6 +289,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   avatarSrc: "/avatars/trainer.vrm",
   voiceEnabled: true,
+  geminiVoiceEnabled: false,
   voicePitch: 1.35,
   clipSubject: DEFAULT_CLIP_SUBJECT,
 };

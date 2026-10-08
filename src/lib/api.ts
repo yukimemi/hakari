@@ -14,15 +14,19 @@ import type {
   WorkoutPlan,
 } from "../../shared/schema";
 import type { ProviderId } from "../../shared/providers";
+import type { TtsPhrase, TtsResponse } from "../../shared/tts";
 import type { Equipment } from "../../shared/exercises";
 
 export class ApiError extends Error {
   readonly status: number;
+  /** Machine-readable reason some routes attach (e.g. /api/tts). */
+  readonly code?: string;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -34,7 +38,7 @@ async function idToken(): Promise<string> {
 
 async function call<T>(
   path: string,
-  init: { method: "GET" | "POST"; body?: unknown },
+  init: { method: "GET" | "POST"; body?: unknown; signal?: AbortSignal },
 ): Promise<T> {
   const token = await idToken();
   const res = await fetch(path, {
@@ -44,6 +48,7 @@ async function call<T>(
       ...(init.body ? { "content-type": "application/json" } : {}),
     },
     body: init.body ? JSON.stringify(init.body) : undefined,
+    signal: init.signal,
   });
 
   const text = await res.text();
@@ -60,7 +65,7 @@ async function call<T>(
   if (!res.ok) {
     const message =
       (payload as { error?: string }).error ?? `HTTP ${res.status}`;
-    throw new ApiError(message, res.status);
+    throw new ApiError(message, res.status, (payload as { code?: string }).code);
   }
   return payload as T;
 }
@@ -82,6 +87,13 @@ export type ProviderStatus = {
 export type ModelInfo = { id: string; label: string; vision?: boolean };
 
 export const api = {
+  generateSpeech(
+    phrases: TtsPhrase[],
+    signal?: AbortSignal,
+  ): Promise<TtsResponse> {
+    return call("/api/tts", { method: "POST", body: { phrases }, signal });
+  },
+
   providers(): Promise<{ providers: ProviderStatus[] }> {
     return call("/api/models", { method: "GET" });
   },

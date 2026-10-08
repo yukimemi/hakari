@@ -37,6 +37,7 @@ import {
   speak,
   speechSupported,
 } from "../speech/speak";
+import { setFallbackVoice, teacher } from "../speech/gemini";
 import { isOwner } from "../../shared/access";
 import InvitePanel from "./InvitePanel";
 
@@ -142,6 +143,64 @@ function VoicePicker({
       >
         試しに聞く
       </Button>
+    </div>
+  );
+}
+
+/** Opt-in switch for Gemini speech plus a preview. The preview is the one
+ *  place a request is awaited: it is a button the user pressed, not a
+ *  workout beat. Without a server key it says so and plays the device
+ *  voice, so the screen works either way. */
+function GeminiVoice({
+  enabled,
+  voiceName,
+  pitch,
+  onChange,
+}: {
+  enabled: boolean;
+  voiceName?: string;
+  pitch: number;
+  onChange: (changes: { geminiVoiceEnabled: boolean }) => void;
+}) {
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => () => teacher.stop(), []);
+
+  const preview = async () => {
+    const text = "こんにちは。今日も一緒にがんばりましょう！";
+    setBusy(true);
+    setNote(null);
+    teacher.setGeminiEnabled(true);
+    setFallbackVoice({ voiceName, pitch });
+    await teacher.unlock();
+    const { failed } = await teacher.prefetch([{ text, phase: "exercise" }]);
+    if (failed) setNote("Gemini 音声を使えませんでした。端末の音声で再生します。");
+    teacher.say({ text, phase: "exercise" });
+    setBusy(false);
+  };
+
+  return (
+    <div className="space-y-2">
+      <label className="flex items-center justify-between gap-3">
+        <span className="text-sm">Gemini の声を使う</span>
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => onChange({ geminiVoiceEnabled: e.target.checked })}
+          className="h-5 w-5 accent-[color:var(--needle)]"
+        />
+      </label>
+      <p className="text-xs text-muted">
+        サーバにキーがあるときだけ使われ、無い・失敗したときは端末の音声に
+        切り替わります。
+      </p>
+      {enabled && (
+        <Button className="w-full" onClick={preview} loading={busy}>
+          Gemini で試しに聞く
+        </Button>
+      )}
+      {note && <p className="text-xs text-muted">{note}</p>}
     </div>
   );
 }
@@ -392,6 +451,15 @@ export default function SettingsPage() {
               className="h-5 w-5 accent-[color:var(--needle)]"
             />
           </label>
+
+          {draft.voiceEnabled && (
+            <GeminiVoice
+              enabled={draft.geminiVoiceEnabled}
+              voiceName={draft.voiceName}
+              pitch={draft.voicePitch}
+              onChange={update}
+            />
+          )}
 
           {draft.voiceEnabled && (
             <VoicePicker

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { AuthError } from "./auth.js";
 import { UsageError } from "./usage.js";
 import { ProviderError } from "./providers.js";
+import { TtsError } from "./tts.js";
 
 export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -52,6 +53,10 @@ export function route(
     try {
       return await handler(request);
     } catch (err) {
+      if (err instanceof TtsError) {
+        // `code` lets the client choose a fallback without parsing prose.
+        return json({ error: err.message, code: err.code }, err.status);
+      }
       if (
         err instanceof AuthError ||
         err instanceof UsageError ||
