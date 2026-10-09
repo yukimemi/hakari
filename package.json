@@ -16,7 +16,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
     "@hookform/resolvers": "^5.9.1",
-    "@mediapipe/tasks-vision": "^1.0.1",
+    "@mediapipe/tasks-vision": "^1.1.0",
     "@pixiv/three-vrm": "^3.5.5",
     "@pixiv/three-vrm-animation": "^3.5.5",
     "date-fns": "^4.4.0",
