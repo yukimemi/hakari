@@ -1,5 +1,5 @@
 preset = "github.com/yukimemi/pj-presets:web-react-firebase"
-applied_at = "2026-09-25T03:34:33.774659153Z"
+applied_at = "2026-10-11T06:39:38.651009598Z"
 
 [[templates]]
 source = "github.com/yukimemi/pj-base"
@@ -8,7 +8,7 @@ version = "0.18.0"
 
 [[templates]]
 source = "github.com/yukimemi/pj-pnpm"
-rev = "00962d56f4ebc7918ec1b70faba72610514945d3"
+rev = "306b0db2e07d83ee844a221f085381e89362add0"
 version = "0.3.0"
 
 [[templates]]
@@ -43,7 +43,7 @@ content_hash = "6d380d1ecc2f882c2011429d548a6f3c774b74f0c757d884453e4667172acc2a
 content_hash = "2bd39e668895cdcbfebf44acea6fed6cb332ec43e1d14a19bdb81ce9211dc5b3"
 
 [files.".github/workflows/ci.yml"]
-content_hash = "70f29b0de97b239437263ee3a701f684e8b7eb5d13fbddf22d5ea8d2efb5b147"
+content_hash = "aaae449d6cf48d76cba1cedff1bc1ba8a18512acec68462511dd7593298725f0"
 
 [files.".github/workflows/claude-review.yml"]
 content_hash = "37e1243a976daf5d69ea2ba9cef66e9a07c3be29073ce4f47b463d826f8cdae7"

@@ -62,7 +62,7 @@ jobs:
       # disagree — i.e. the first time Renovate bumps `packageManager`
       # in a consumer, which would break CI in every project at once
       # while the workflow itself still looked correct.
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v6.1.0
 
       # After pnpm, never before: `cache: "pnpm"` makes setup-node shell
       # out to `pnpm store path --silent` to locate the store, so pnpm
