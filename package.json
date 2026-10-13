@@ -14,7 +14,7 @@
     "avatar": "node scripts/fetch-avatar.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.132.1",
+    "@anthropic-ai/sdk": "^0.133.0",
     "@hookform/resolvers": "^5.9.1",
     "@mediapipe/tasks-vision": "^1.1.0",
     "@pixiv/three-vrm": "^3.5.5",
