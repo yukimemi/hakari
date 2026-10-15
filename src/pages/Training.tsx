@@ -29,6 +29,7 @@ import Scanning from "../components/Scanning";
 import WorkoutLog from "../components/WorkoutLog";
 import ClipStage from "../components/ClipStage";
 import WorkoutSession from "./WorkoutSession";
+import Groove from "./Groove";
 import { defaultMenu } from "../workout/session";
 import { useClips } from "../data/clips";
 import { isOwner } from "../../shared/access";
@@ -61,6 +62,8 @@ export default function Training() {
   // "先生と始める": the value is the plan day to run, or "free" for the
   // catalogue menu when no plan has been made yet.
   const sessionView = useSubView("session");
+  // "曲に合わせて": a program laid over a song the user picks.
+  const grooveView = useSubView("groove");
   const [pickedDay, setPickedDay] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -120,6 +123,24 @@ export default function Training() {
     );
     return () => controller.abort();
   }, [geminiVoice, plan, pickedDay]);
+
+  if (grooveView.value !== null) {
+    return (
+      <Groove
+        settings={settings}
+        shape={shape}
+        weight={
+          weights.length > 0
+            ? { kg: currentKg, source: "latest" }
+            : goal.startWeightKg > 0
+              ? { kg: goal.startWeightKg, source: "start" }
+              : undefined
+        }
+        focusAreas={user.body?.focusAreas}
+        onClose={grooveView.close}
+      />
+    );
+  }
 
   if (sessionView.value !== null) {
     const day = plan?.days[Number(sessionView.value)];
@@ -196,6 +217,16 @@ export default function Training() {
           onClick={() => sessionView.open(plan ? String(pickedDay) : "free")}
         >
           先生と始める
+        </Button>
+      </Panel>
+
+      <Panel title="曲に合わせて運動">
+        <p className="text-sm leading-relaxed">
+          好きな曲を選ぶと拍を検出して、曲の長さぴったりのプログラムを作ります。
+          アバターは曲のビートに合わせて動きます。
+        </p>
+        <Button className="mt-3" onClick={() => grooveView.open("1")}>
+          曲を選んで始める
         </Button>
       </Panel>
 

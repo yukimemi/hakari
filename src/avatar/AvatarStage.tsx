@@ -35,6 +35,10 @@ type Props = {
   /** Repetition tempo multiplier. 1 = the motion's authored speed. */
   speed?: number;
   paused?: boolean;
+  /** Per-frame override for playback locked to an outside clock (a song).
+   *  Read every frame; its exercise and repetition phase win over
+   *  `exerciseId` and the stage's own clock. No exercise means idle. */
+  timeline?: () => { exerciseId?: string; phase: number };
   className?: string;
 };
 
@@ -45,6 +49,7 @@ export default function AvatarStage({
   exerciseId,
   speed = 1,
   paused = false,
+  timeline,
   className = "",
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -52,6 +57,7 @@ export default function AvatarStage({
   const motionRef = useRef<Motion>(IDLE);
   const speedRef = useRef(speed);
   const pausedRef = useRef(paused);
+  const timelineRef = useRef(timeline);
   const [usingFallback, setUsingFallback] = useState(false);
   const [ready, setReady] = useState(false);
   const [moved, setMoved] = useState(false);
@@ -69,6 +75,9 @@ export default function AvatarStage({
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
+  useEffect(() => {
+    timelineRef.current = timeline;
+  }, [timeline]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -186,6 +195,9 @@ export default function AvatarStage({
       if (src && !bare) {
         try {
           install(await loadVrm(src));
+          // The same stage can be handed a working model after a missing
+          // one (a character picked on the groove screen); drop the note.
+          if (!disposed) setUsingFallback(false);
           return;
         } catch {
           // A missing or malformed VRM is the common case, not an error
@@ -209,8 +221,16 @@ export default function AvatarStage({
       if (!pausedRef.current) elapsed += delta * speedRef.current;
 
       if (rig) {
-        const motion = motionRef.current;
-        const sample = sampleMotion(motion, elapsed / motion.loopSec);
+        const driven = timelineRef.current?.();
+        const motion = driven
+          ? driven.exerciseId
+            ? motionFor(driven.exerciseId)
+            : IDLE
+          : motionRef.current;
+        const sample = sampleMotion(
+          motion,
+          driven?.exerciseId ? driven.phase : elapsed / motion.loopSec,
+        );
 
         // Back to the rest pose first. A keyframe only names the bones it
         // moves, so without this every bone it leaves alone keeps whatever

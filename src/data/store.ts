@@ -5,6 +5,8 @@
 //   users/{uid}/weights/{date}   one doc per day, id = yyyy-MM-dd
 //   users/{uid}/meals/{id}
 //   users/{uid}/workouts/{id}
+//   users/{uid}/grooves/{songSha256}  a program laid over a song; the song
+//                                     itself stays on the device
 //   users/{uid}/bodyPhotos/{id}
 //
 // Profile, goal and settings share the user document so the app boots on
@@ -46,6 +48,7 @@ import {
   type WorkoutPlan,
 } from "../../shared/schema";
 import { ACCESS_DOC, type AccessDoc } from "../../shared/access";
+import { GrooveDoc } from "../../shared/groove";
 import { forMerge, forWrite } from "./sanitise";
 
 /** How an analysis reads back out of Firestore, as opposed to what the
@@ -337,6 +340,52 @@ export async function saveWorkout(
 
 export async function deleteWorkout(uid: string, id: string): Promise<void> {
   await deleteDoc(doc(db(), "users", uid, "workouts", id));
+}
+
+// ---------------------------------------------------------------------------
+// Grooves — a program per song, keyed by the song file's SHA-256
+// ---------------------------------------------------------------------------
+
+export type StoredGroove = GrooveDoc & { id: string; updatedAt?: Timestamp };
+
+/** Newest first. A document that no longer parses is left out rather than
+ *  handed to a player that would trip over it. */
+export function watchGrooves(
+  uid: string,
+  onChange: (items: StoredGroove[]) => void,
+  onError: (err: Error) => void,
+): Unsubscribe {
+  return onSnapshot(
+    query(collection(db(), "users", uid, "grooves"), orderBy("updatedAt", "desc")),
+    (snap) =>
+      onChange(
+        snap.docs.flatMap((d) => {
+          const parsed = GrooveDoc.safeParse(d.data());
+          if (!parsed.success) return [];
+          // `get` is untyped; the field is only ever a server timestamp.
+          const updatedAt: Timestamp | undefined = d.get("updatedAt");
+          return [{ ...parsed.data, id: d.id, updatedAt }];
+        }),
+      ),
+    onError,
+  );
+}
+
+export async function readGroove(uid: string, id: string): Promise<GrooveDoc | null> {
+  const snap = await getDoc(doc(db(), "users", uid, "grooves", id));
+  const parsed = GrooveDoc.safeParse(snap.data());
+  return parsed.success ? parsed.data : null;
+}
+
+export async function saveGroove(uid: string, id: string, groove: GrooveDoc): Promise<void> {
+  await setDoc(doc(db(), "users", uid, "grooves", id), {
+    ...forWrite(groove),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function deleteGroove(uid: string, id: string): Promise<void> {
+  await deleteDoc(doc(db(), "users", uid, "grooves", id));
 }
 
 // ---------------------------------------------------------------------------
