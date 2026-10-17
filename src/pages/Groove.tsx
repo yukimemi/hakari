@@ -174,7 +174,10 @@ export default function Groove({
   // A stable callback for the 3D stage, read once per frame.
   const timeline = useCallback(() => {
     const current = programRef.current;
-    if (!current || !player.playing) return { phase: 0 };
+    // Not gated on `playing`: paused, `time()` holds the position, so the
+    // figure freezes mid-rep instead of dropping to idle; stopped it is 0,
+    // before the first section, which is idle anyway.
+    if (!current) return { phase: 0 };
     return poseAt(current, player.time());
   }, [player]);
 
@@ -274,6 +277,9 @@ export default function Groove({
   const removeSaved = async (item: StoredGroove) => {
     if (!window.confirm(`「${item.title}」のプログラムを削除しますか?`)) return;
     if (loaded?.id === item.id) {
+      // A nudge still waiting to be written would recreate the document.
+      if (pendingSave.current !== null) window.clearTimeout(pendingSave.current);
+      pendingSave.current = null;
       stopPlayback();
       setLoaded(null);
     }
@@ -710,17 +716,21 @@ export default function Groove({
             <input type="checkbox" checked={clicks} onChange={(e) => setClicks(e.target.checked)} />
           </label>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button onClick={() => nudge(-0.05)}>-50ms</Button>
-            <Button onClick={() => nudge(-0.01)}>-10ms</Button>
+            {/* Locked while the model works: its answer is applied to the
+                program as it was sent, and would undo a nudge made meanwhile. */}
+            <Button onClick={() => nudge(-0.05)} disabled={busy !== null}>-50ms</Button>
+            <Button onClick={() => nudge(-0.01)} disabled={busy !== null}>-10ms</Button>
             <span className="reading w-20 text-center text-sm">
               {Math.round(loaded.doc.analysis.offsetSec * 1000)}ms
             </span>
-            <Button onClick={() => nudge(0.01)}>+10ms</Button>
-            <Button onClick={() => nudge(0.05)}>+50ms</Button>
+            <Button onClick={() => nudge(0.01)} disabled={busy !== null}>+10ms</Button>
+            <Button onClick={() => nudge(0.05)} disabled={busy !== null}>+50ms</Button>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button onClick={() => nudge(30 / loaded.doc.analysis.bpm)}>裏拍にずれている時 (半拍)</Button>
-            <Button onClick={shiftBar} disabled={phase === "playing"}>
+            <Button onClick={() => nudge(30 / loaded.doc.analysis.bpm)} disabled={busy !== null}>
+              裏拍にずれている時 (半拍)
+            </Button>
+            <Button onClick={shiftBar} disabled={phase === "playing" || busy !== null}>
               小節の頭を1拍ずらす
             </Button>
           </div>

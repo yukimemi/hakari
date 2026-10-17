@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   deleteSong: vi.fn(async () => {}),
   readGroove: vi.fn(),
   watchGrooves: vi.fn(),
+  saveGroove: vi.fn(async () => {}),
 }));
 
 vi.mock("../auth/context", () => ({ useUid: () => "test-user" }));
@@ -33,7 +34,7 @@ vi.mock("../data/store", () => ({
   deleteGroove: mocks.deleteGroove,
   readGroove: mocks.readGroove,
   watchGrooves: mocks.watchGrooves,
-  saveGroove: vi.fn(),
+  saveGroove: mocks.saveGroove,
 }));
 vi.mock("../groove/library", () => ({
   getCharacter: async () => null,
@@ -139,5 +140,20 @@ describe("Groove outgoing run", () => {
     await screen.findByRole("button", { name: "スタート" });
     view.unmount();
     expect(mocks.saveWorkout).not.toHaveBeenCalled();
+  });
+
+  it("does not recreate a program deleted while a nudge is still waiting to be saved", async () => {
+    render(<Groove
+      settings={{ ...DEFAULT_SETTINGS, voiceEnabled: false }}
+      shape={{ shoulder: 0, chest: 0, waist: 0, hip: 0, thigh: 0, arm: 0 }}
+      weight={{ kg: 60, source: "latest" }} onClose={() => {}}
+    />);
+    fireEvent.click(screen.getByRole("button", { name: /元の曲/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "+10ms" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "削除" })[0]);
+    await waitFor(() => expect(mocks.deleteGroove).toHaveBeenCalledWith("test-user", original.id));
+    // Past the 800 ms debounce.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    expect(mocks.saveGroove).not.toHaveBeenCalled();
   });
 });
