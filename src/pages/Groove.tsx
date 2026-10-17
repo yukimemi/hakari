@@ -196,15 +196,6 @@ export default function Groove({
 
   // --- loading a song ----------------------------------------------------
 
-  const stopPlayback = useCallback(() => {
-    player.stop();
-    cancelSpeech();
-    teacher.stop();
-    setPhase("idle");
-    setSegmentIndex(-1);
-    setNow(0);
-  }, [player]);
-
   const openFile = async (file: File) => {
     setError(null);
     stopPlayback();
@@ -449,6 +440,19 @@ export default function Groove({
     [loaded, uid, weight],
   );
 
+  const stopPlayback = useCallback(() => {
+    // Capture the outgoing program and position before stopping resets the
+    // clock or a song switch replaces the program. finish consumes runId
+    // synchronously, so later stops/unmounts cannot record the run twice.
+    void finish(player.time());
+    player.stop();
+    cancelSpeech();
+    teacher.stop();
+    setPhase("idle");
+    setSegmentIndex(-1);
+    setNow(0);
+  }, [player, finish]);
+
   useEffect(() => {
     player.onEnded(() => {
       setPhase("done");
@@ -506,10 +510,8 @@ export default function Groove({
   };
 
   const stop = () => {
-    const t = player.time();
     stopPlayback();
     setPhase("done");
-    void finish(t);
   };
 
   // --- views -------------------------------------------------------------
