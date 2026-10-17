@@ -181,22 +181,28 @@ export default function Groove({
     return poseAt(current, player.time());
   }, [player]);
 
-  /** Writes the program back, at most once per burst of nudges. */
-  const pendingSave = useRef<{ id: string; timer: number } | null>(null);
+  /** Writes the program back, at most once per burst of nudges. One timer
+   *  per song: switching songs mid-burst must not drop the other's write. */
+  const pendingSaves = useRef(new Map<string, number>());
+  const cancelPendingSave = useCallback((id: string) => {
+    const timer = pendingSaves.current.get(id);
+    if (timer !== undefined) window.clearTimeout(timer);
+    pendingSaves.current.delete(id);
+  }, []);
   const choreographyRequest = useRef<{ id: string } | null>(null);
   const update = useCallback(
     (next: Loaded) => {
       setLoaded(next);
-      if (pendingSave.current !== null) window.clearTimeout(pendingSave.current.timer);
+      cancelPendingSave(next.id);
       const timer = window.setTimeout(() => {
-        pendingSave.current = null;
+        pendingSaves.current.delete(next.id);
         void saveGroove(uid, next.id, next.doc).catch((err: unknown) =>
           setError(err instanceof Error ? err.message : "保存に失敗しました"),
         );
       }, 800);
-      pendingSave.current = { id: next.id, timer };
+      pendingSaves.current.set(next.id, timer);
     },
-    [uid],
+    [uid, cancelPendingSave],
   );
 
   // --- loading a song ----------------------------------------------------
@@ -279,10 +285,7 @@ export default function Groove({
   const removeSaved = async (item: StoredGroove) => {
     if (!window.confirm(`「${item.title}」のプログラムを削除しますか?`)) return;
     // Invalidate work by its target, even when another song is selected.
-    if (pendingSave.current?.id === item.id) {
-      window.clearTimeout(pendingSave.current.timer);
-      pendingSave.current = null;
-    }
+    cancelPendingSave(item.id);
     if (choreographyRequest.current?.id === item.id) {
       choreographyRequest.current = null;
       setBusy(null);
@@ -327,6 +330,10 @@ export default function Groove({
         source: "ai",
         note: res.note || undefined,
       };
+      // The doc above already carries any nudge made before the request
+      // (nudges are locked while it runs); a write still waiting would
+      // land after this one and put the old picks back.
+      cancelPendingSave(loaded.id);
       await saveGroove(uid, loaded.id, doc);
       if (choreographyRequest.current !== request) return;
       setLoaded({ id: loaded.id, doc });
