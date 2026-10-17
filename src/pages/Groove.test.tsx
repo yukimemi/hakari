@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS } from "../../shared/schema";
 import type { StoredGroove } from "../data/store";
@@ -14,12 +14,13 @@ const mocks = vi.hoisted(() => ({
   readGroove: vi.fn(),
   watchGrooves: vi.fn(),
   saveGroove: vi.fn(async () => {}),
+  groovePlan: vi.fn(),
 }));
 
 vi.mock("../auth/context", () => ({ useUid: () => "test-user" }));
 vi.mock("../avatar/AvatarStage", () => ({ default: () => null }));
 vi.mock("../audio/mixer", () => ({ speakDucked: vi.fn() }));
-vi.mock("../lib/api", () => ({ api: {}, ApiError: class extends Error {} }));
+vi.mock("../lib/api", () => ({ api: { groovePlan: mocks.groovePlan }, ApiError: class extends Error {} }));
 vi.mock("../lib/wakeLock", () => ({ useWakeLock: vi.fn() }));
 vi.mock("../speech/speak", () => ({ cancelSpeech: vi.fn(), speechSupported: () => false }));
 vi.mock("../speech/gemini", () => ({
@@ -142,7 +143,7 @@ describe("Groove outgoing run", () => {
     expect(mocks.saveWorkout).not.toHaveBeenCalled();
   });
 
-  it("does not recreate a program deleted while a nudge is still waiting to be saved", async () => {
+  it.each([false, true])("does not recreate a deleted program with a pending nudge (switch song: %s)", async (switchSong) => {
     render(<Groove
       settings={{ ...DEFAULT_SETTINGS, voiceEnabled: false }}
       shape={{ shoulder: 0, chest: 0, waist: 0, hip: 0, thigh: 0, arm: 0 }}
@@ -150,10 +151,46 @@ describe("Groove outgoing run", () => {
     />);
     fireEvent.click(screen.getByRole("button", { name: /元の曲/ }));
     fireEvent.click(await screen.findByRole("button", { name: "+10ms" }));
+    if (switchSong) {
+      fireEvent.click(screen.getByRole("button", { name: /次の曲/ }));
+      await waitFor(() => expect(screen.getByRole("button", { name: /次の曲/ }).hasAttribute("disabled")).toBe(false));
+    }
     fireEvent.click(screen.getAllByRole("button", { name: "削除" })[0]);
     await waitFor(() => expect(mocks.deleteGroove).toHaveBeenCalledWith("test-user", original.id));
     // Past the 800 ms debounce.
     await new Promise((resolve) => setTimeout(resolve, 1000));
     expect(mocks.saveGroove).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("discards choreography after deletion (request fails: %s)", async (fails) => {
+    let resolve!: (value: { picks: []; note: string }) => void;
+    let reject!: (reason: Error) => void;
+    mocks.groovePlan.mockReturnValueOnce(new Promise((yes, no) => {
+      resolve = yes;
+      reject = no;
+    }));
+    await begin(true);
+    fireEvent.click(screen.getByRole("button", { name: "終了" }));
+    fireEvent.click(screen.getByRole("button", { name: "AI で振り付け" }));
+    expect(mocks.groovePlan).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getAllByRole("button", { name: "削除" })[0]);
+    await waitFor(() => expect(mocks.deleteGroove).toHaveBeenCalledWith("test-user", original.id));
+    // Open another song before the stale request settles.
+    fireEvent.click(screen.getByRole("button", { name: /次の曲/ }));
+    await screen.findByRole("button", { name: "スタート" });
+    await act(async () => {
+      if (fails) reject(new Error("stale failure"));
+      else resolve({ picks: [], note: "stale choreography" });
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: "AI で振り付け" }).hasAttribute("disabled")).toBe(false));
+    expect(mocks.saveGroove).not.toHaveBeenCalled();
+    expect(screen.queryByText("stale choreography")).toBeNull();
+    expect(screen.queryByText("振り付けを作れませんでした")).toBeNull();
+    // The selected program must remain the second song.
+    fireEvent.click(screen.getByRole("button", { name: "スタート" }));
+    mocks.time = 48;
+    fireEvent.click(screen.getByRole("button", { name: "終了" }));
+    await waitFor(() => expect(mocks.saveWorkout).toHaveBeenLastCalledWith("test-user",
+      expect.objectContaining({ name: "曲に合わせて: 次の曲" }), expect.any(String)));
   });
 });

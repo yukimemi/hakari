@@ -182,17 +182,19 @@ export default function Groove({
   }, [player]);
 
   /** Writes the program back, at most once per burst of nudges. */
-  const pendingSave = useRef<number | null>(null);
+  const pendingSave = useRef<{ id: string; timer: number } | null>(null);
+  const choreographyRequest = useRef<{ id: string } | null>(null);
   const update = useCallback(
     (next: Loaded) => {
       setLoaded(next);
-      if (pendingSave.current !== null) window.clearTimeout(pendingSave.current);
-      pendingSave.current = window.setTimeout(() => {
+      if (pendingSave.current !== null) window.clearTimeout(pendingSave.current.timer);
+      const timer = window.setTimeout(() => {
         pendingSave.current = null;
         void saveGroove(uid, next.id, next.doc).catch((err: unknown) =>
           setError(err instanceof Error ? err.message : "保存に失敗しました"),
         );
       }, 800);
+      pendingSave.current = { id: next.id, timer };
     },
     [uid],
   );
@@ -276,10 +278,16 @@ export default function Groove({
 
   const removeSaved = async (item: StoredGroove) => {
     if (!window.confirm(`「${item.title}」のプログラムを削除しますか?`)) return;
-    if (loaded?.id === item.id) {
-      // A nudge still waiting to be written would recreate the document.
-      if (pendingSave.current !== null) window.clearTimeout(pendingSave.current);
+    // Invalidate work by its target, even when another song is selected.
+    if (pendingSave.current?.id === item.id) {
+      window.clearTimeout(pendingSave.current.timer);
       pendingSave.current = null;
+    }
+    if (choreographyRequest.current?.id === item.id) {
+      choreographyRequest.current = null;
+      setBusy(null);
+    }
+    if (loaded?.id === item.id) {
       stopPlayback();
       setLoaded(null);
     }
@@ -290,6 +298,8 @@ export default function Groove({
 
   const choreograph = async () => {
     if (!loaded) return;
+    const request = { id: loaded.id };
+    choreographyRequest.current = request;
     setError(null);
     setBusy("AI が振り付けを考えています");
     try {
@@ -309,6 +319,7 @@ export default function Groove({
         constraints: settings.training.constraints || undefined,
         focusAreas,
       });
+      if (choreographyRequest.current !== request) return;
       const given = res.picks.map((p) => p ?? undefined);
       const doc: GrooveDoc = {
         ...loaded.doc,
@@ -317,11 +328,17 @@ export default function Groove({
         note: res.note || undefined,
       };
       await saveGroove(uid, loaded.id, doc);
+      if (choreographyRequest.current !== request) return;
       setLoaded({ id: loaded.id, doc });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "振り付けを作れませんでした");
+      if (choreographyRequest.current === request) {
+        setError(err instanceof ApiError ? err.message : "振り付けを作れませんでした");
+      }
     } finally {
-      setBusy(null);
+      if (choreographyRequest.current === request) {
+        choreographyRequest.current = null;
+        setBusy(null);
+      }
     }
   };
 
