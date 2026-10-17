@@ -756,8 +756,9 @@ touches them again.
 `test` block in `vite.config.ts`, so a spec that needs a DOM opts in with
 a `// @vitest-environment jsdom` docblock on line 1. What is covered is
 the arithmetic (`shared/calc.ts`), the body-shape/motion maths
-(`src/avatar/`) and the sanitisers; LLM calls and Firestore are not
-mocked, they are simply not unit-tested.
+(`src/avatar/`), the beat tracker and beat-to-rep mapping (`src/groove/`)
+and the sanitisers; LLM calls and Firestore are not mocked, they are
+simply not unit-tested.
 
 ### Avatar
 
@@ -787,6 +788,36 @@ keep prompts short and plain. Google's video URLs expire after two days,
 so adopting a clip copies it into Storage `clips/` and records the choice
 in `config/clips`; that bucket needs a CORS config or `<video>` hangs at
 `readyState 0`.
+
+### Grooves — workouts over the user's own song (`src/groove/`)
+
+- **The song never leaves the device.** It is decoded and beat-tracked in
+  the browser (`beats.ts`), cached in IndexedDB (`library.ts`, last 12
+  songs), and only the beat grid plus picks go to Firestore at
+  `users/{uid}/grooves/{sha256 of the file}`. `/api/groove-plan` gets
+  section timings and levels, never audio. Keep it that way: a feature
+  that uploads the track is copying someone's music into our cloud.
+- **The audio clock is the only clock.** The avatar's pose is
+  `poseAt(program, player.time())` every frame, through `AvatarStage`'s
+  `timeline` prop; `player.time()` is `AudioContext.currentTime` minus
+  reported latency. Do not drive it from `Date.now()`/rAF deltas — that
+  drifts off the music within a minute.
+- `GroovePlayer` decodes on an `OfflineAudioContext` and creates its
+  `AudioContext` inside the start tap. A context created earlier starts
+  suspended, and iOS can keep it that way, which freezes the program.
+- Beat times are calibrated: `beats.ts` reads synthetic clicks within a
+  few ms, and matches librosa's `beat_track` (minus librosa's own ~20 ms
+  lag) on steady-tempo music. Strong off-beats (polka) can lock it half a
+  beat out; the screen's half-beat / bar / ±ms nudges are the escape, and
+  `analysis.offsetSec` persists them.
+- Model picks are advisory: `rulePicks(sections, opts, aiPicks)` keeps
+  every usable id and fills the rest, so a partial or wrong answer still
+  plays. Rep length (`beatsPerRep`) is always computed from the grid and
+  `MOTIONS[id].loopSec`, never by the model.
+- Headless Chrome is a poor place to check the clock: without an audio
+  device `currentTime` stalls. `--disable-audio-output` gives a fake sink
+  that advances, but only while page JS is running, so sample inside one
+  `evaluate` rather than between tool calls.
 
 ### Language
 

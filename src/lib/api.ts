@@ -17,6 +17,7 @@ import type {
 import type { ProviderId } from "../../shared/providers";
 import type { TtsPhrase, TtsResponse } from "../../shared/tts";
 import type { Equipment } from "../../shared/exercises";
+import type { GrooveSectionBrief } from "../../shared/groove";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -172,6 +173,25 @@ export const api = {
   }): Promise<{ plan: WorkoutPlan; provider: ProviderId; model: string }> {
     const { assignment, ...rest } = args;
     return call("/api/workout-plan", {
+      method: "POST",
+      body: { provider: assignment.provider, model: assignment.model, ...rest },
+    });
+  },
+
+  /** One exercise per section of a song; null where the model gave
+   *  nothing usable. Only the song's shape is sent, never the audio. */
+  groovePlan(args: {
+    assignment: TaskAssignment;
+    bpm: number;
+    durationSec: number;
+    sections: GrooveSectionBrief[];
+    equipment: Equipment[];
+    experience: "beginner" | "intermediate" | "advanced";
+    constraints?: string;
+    focusAreas?: string[];
+  }): Promise<{ picks: (string | null)[]; note: string; provider: ProviderId; model: string }> {
+    const { assignment, ...rest } = args;
+    return call("/api/groove-plan", {
       method: "POST",
       body: { provider: assignment.provider, model: assignment.model, ...rest },
     });
