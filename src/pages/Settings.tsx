@@ -191,7 +191,7 @@ export function GeminiVoice({
       controller.signal,
     );
     if (controller.signal.aborted) return;
-    if (failed) {
+    if (failed || reason) {
       setNote(
         reason === "limit"
           ? "Gemini 音声の利用上限に達しています。端末の音声で再生します。"

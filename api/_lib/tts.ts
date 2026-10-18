@@ -140,8 +140,10 @@ async function upstreamReason(res: Response, key: string) {
     try {
       const parsed: unknown = JSON.parse(text);
       if (isRecord(parsed) && isRecord(parsed.error)) {
-        dailyQuota = isDailyQuota(parsed.error);
         if (typeof parsed.error.message === "string") message = parsed.error.message;
+        // The interactions endpoint answers a spent free-tier day with no
+        // QuotaFailure details, only "(limit: 10 requests per day …)".
+        dailyQuota = isDailyQuota(parsed.error) || /requests? per day/i.test(message);
       }
     } catch {
       /* not JSON: log the raw text */

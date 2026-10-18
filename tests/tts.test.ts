@@ -165,6 +165,24 @@ describe("POST /api/tts", () => {
     expect(logged).not.toContain(SECRET);
   });
 
+  it("treats the interactions endpoint's detail-less daily limit as the limit", async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        {
+          error: {
+            message:
+              "Rate limit exceeded for model gemini-3.8-flash-tts (limit: 10 requests per day on Free Tier).",
+            code: "too_many_requests",
+          },
+        },
+        { status: 429 },
+      ),
+    );
+    const res = await POST(req(ok));
+    expect(res.status).toBe(429);
+    expect(await res.json()).toMatchObject({ code: "limit" });
+  });
+
   it.each([
     ["a minute quota", { error: {
       status: "RESOURCE_EXHAUSTED",
