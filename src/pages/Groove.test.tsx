@@ -143,6 +143,18 @@ describe("Groove outgoing run", () => {
     expect(mocks.saveWorkout).not.toHaveBeenCalled();
   });
 
+  it("keeps one set of transport controls while the stage is expanded, and Escape collapses it", async () => {
+    await begin(false);
+    fireEvent.click(screen.getByRole("button", { name: "拡大" }));
+    expect(screen.getAllByRole("button", { name: "一時停止" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "終了" })).toHaveLength(1);
+    expect(document.body.style.overflow).toBe("hidden");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.getByRole("button", { name: "拡大" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "一時停止" })).toHaveLength(1);
+    expect(document.body.style.overflow).not.toBe("hidden");
+  });
+
   it.each([false, true])("does not recreate a deleted program with a pending nudge (switch song: %s)", async (switchSong) => {
     render(<Groove
       settings={{ ...DEFAULT_SETTINGS, voiceEnabled: false }}

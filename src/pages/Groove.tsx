@@ -105,6 +105,8 @@ export default function Groove({
   const [clicks, setClicks] = useState(false);
   const [saved, setSaved] = useState<Saved>({ kind: "none" });
   const [character, setCharacter] = useState<{ name: string; url: string } | null>(null);
+  /** The avatar fills the screen; only the caption, progress and transport stay. */
+  const [expanded, setExpanded] = useState(false);
 
   const songInput = useRef<HTMLInputElement>(null);
   const characterInput = useRef<HTMLInputElement>(null);
@@ -113,6 +115,22 @@ export default function Groove({
   const voiceOk = settings.voiceEnabled && speechSupported();
   const geminiOn = voiceOk && settings.geminiVoiceEnabled;
   useWakeLock(phase === "playing");
+
+  // Escape closes the expanded stage, and the page behind it must not scroll
+  // while it is open.
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExpanded(false);
+    };
+    window.addEventListener("keydown", onKey);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
+    };
+  }, [expanded]);
 
   // --- library and character --------------------------------------------
 
@@ -572,6 +590,52 @@ export default function Groove({
           ? `まもなく ${next.name}`
           : "";
 
+  const captionEl = (
+    <p
+      className={`${expanded ? "min-h-[2.5rem]" : "min-h-[3rem]"} text-sm leading-relaxed`}
+      aria-live="polite"
+    >
+      {caption}
+    </p>
+  );
+  const progressEl = program && (
+    <div>
+      <div className="h-1.5 w-full overflow-hidden rounded bg-sunk">
+        <div
+          className="h-full bg-ink/70"
+          style={{ width: `${Math.min(100, (now / program.durationSec) * 100)}%` }}
+        />
+      </div>
+      <div className="mt-1 flex justify-between text-xs text-muted">
+        <span className="reading">{clock(now)}</span>
+        <span>{next && phase === "playing" ? `次: ${next.name}` : ""}</span>
+        <span className="reading">{clock(program.durationSec)}</span>
+      </div>
+    </div>
+  );
+  const controlsEl = program && (
+    <div className={expanded ? "flex gap-2" : "flex flex-wrap gap-2"}>
+      {phase === "playing" ? (
+        <Button variant="primary" size="lg" onClick={pause}>
+          一時停止
+        </Button>
+      ) : phase === "paused" ? (
+        <Button variant="primary" size="lg" onClick={resume}>
+          再開
+        </Button>
+      ) : (
+        <Button variant="primary" size="lg" onClick={start}>
+          {phase === "done" ? "もう一度" : "スタート"}
+        </Button>
+      )}
+      {(phase === "playing" || phase === "paused") && (
+        <Button size="lg" onClick={stop}>
+          終了
+        </Button>
+      )}
+    </div>
+  );
+
   return (
     <>
       <Panel
@@ -588,55 +652,45 @@ export default function Groove({
           </Button>
         }
       >
-        <div className="relative h-72 w-full overflow-hidden rounded-lg bg-sunk">
-          <AvatarStage
-            src={character?.url ?? settings.avatarSrc}
-            shape={character ? NEUTRAL : shape}
-            timeline={timeline}
-            className="h-full w-full"
-          />
-          {program && (phase === "playing" || phase === "paused") && (
-            <BeatLight player={player} grid={program.grid} downbeat={loaded!.doc.analysis.downbeat} />
+        <div
+          className={
+            expanded
+              ? "fixed inset-0 z-50 flex flex-col bg-sunk"
+              : "relative h-72 w-full overflow-hidden rounded-lg bg-sunk"
+          }
+        >
+          <div className={expanded ? "relative min-h-0 flex-1" : "absolute inset-0"}>
+            <AvatarStage
+              src={character?.url ?? settings.avatarSrc}
+              shape={character ? NEUTRAL : shape}
+              timeline={timeline}
+              className="h-full w-full"
+            />
+            {program && (phase === "playing" || phase === "paused") && (
+              <BeatLight player={player} grid={program.grid} downbeat={loaded!.doc.analysis.downbeat} />
+            )}
+            <button
+              type="button"
+              onClick={() => setExpanded((on) => !on)}
+              aria-pressed={expanded}
+              className="absolute left-2 top-11 z-10 rounded-lg border border-rule/70 bg-panel/80 px-2 py-1 text-xs text-muted backdrop-blur transition-opacity hover:text-ink"
+            >
+              {expanded ? "縮小" : "拡大"}
+            </button>
+          </div>
+          {expanded && (
+            <div className="space-y-2 border-t border-rule/60 bg-panel px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+              {captionEl}
+              {progressEl}
+              {controlsEl}
+            </div>
           )}
         </div>
-        <p className="mt-3 min-h-[3rem] text-sm leading-relaxed" aria-live="polite">
-          {caption}
-        </p>
-        {program && (
-          <div className="mt-1">
-            <div className="h-1.5 w-full overflow-hidden rounded bg-sunk">
-              <div
-                className="h-full bg-ink/70"
-                style={{ width: `${Math.min(100, (now / program.durationSec) * 100)}%` }}
-              />
-            </div>
-            <div className="mt-1 flex justify-between text-xs text-muted">
-              <span className="reading">{clock(now)}</span>
-              <span>{next && phase === "playing" ? `次: ${next.name}` : ""}</span>
-              <span className="reading">{clock(program.durationSec)}</span>
-            </div>
-          </div>
-        )}
-        {program && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {phase === "playing" ? (
-              <Button variant="primary" size="lg" onClick={pause}>
-                一時停止
-              </Button>
-            ) : phase === "paused" ? (
-              <Button variant="primary" size="lg" onClick={resume}>
-                再開
-              </Button>
-            ) : (
-              <Button variant="primary" size="lg" onClick={start}>
-                {phase === "done" ? "もう一度" : "スタート"}
-              </Button>
-            )}
-            {(phase === "playing" || phase === "paused") && (
-              <Button size="lg" onClick={stop}>
-                終了
-              </Button>
-            )}
+        {!expanded && (
+          <div className="mt-3 space-y-3">
+            {captionEl}
+            {progressEl}
+            {controlsEl}
           </div>
         )}
         {!voiceOk && (
