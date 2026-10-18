@@ -27,6 +27,11 @@ const rest = (data: string) => ({
   ],
 });
 
+const quotaFailure = (quotaId: string) => ({
+  "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+  violations: [{ quotaId }],
+});
+
 const req = (body: unknown) =>
   new Request("http://x/api/tts", {
     method: "POST",
@@ -140,7 +145,11 @@ describe("POST /api/tts", () => {
   it("reports an exhausted upstream quota as the limit and logs Google's reason", async () => {
     fetchMock.mockResolvedValueOnce(
       Response.json(
-        { error: { message: `Rate limit exceeded (key ${SECRET})` } },
+        { error: {
+          message: `Quota exceeded (key ${SECRET}) ${"x".repeat(350)}`,
+          status: "RESOURCE_EXHAUSTED",
+          details: [quotaFailure("GenerateRequestsPerDayPerProjectPerModel-FreeTier")],
+        } },
         { status: 429 },
       ),
     );
@@ -148,11 +157,42 @@ describe("POST /api/tts", () => {
     expect(res.status).toBe(429);
     const text = await res.text();
     expect(JSON.parse(text).code).toBe("limit");
-    expect(text).not.toContain("Rate limit");
+    expect(text).not.toContain("Quota exceeded");
     const logged = vi.mocked(console.error).mock.calls.flat().join(" ");
     expect(logged).toContain("429");
-    expect(logged).toContain("Rate limit exceeded");
+    expect(logged).toContain("Quota exceeded");
+    expect(vi.mocked(console.error).mock.calls[0][2]).toHaveLength(300);
     expect(logged).not.toContain(SECRET);
+  });
+
+  it.each([
+    ["a minute quota", { error: {
+      status: "RESOURCE_EXHAUSTED",
+      message: "Quota exceeded. Please retry in 30s.",
+      details: [quotaFailure("GenerateRequestsPerMinutePerProjectPerModel-FreeTier")],
+    } }],
+    ["an ambiguous resource exhaustion", { error: {
+      status: "RESOURCE_EXHAUSTED", message: "Quota exceeded",
+    } }],
+    ["malformed quota details", { error: { details: [null, { violations: "PerDay" }] } }],
+    ["a generic rate limit", { error: { message: "Rate limit exceeded" } }],
+  ])("keeps %s retryable on a later phrase", async (_name, body) => {
+    fetchMock.mockResolvedValueOnce(Response.json(body, {
+      status: 429, headers: { "Retry-After": "30" },
+    }));
+    const res = await POST(req(ok));
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ code: "upstream" });
+    expect((await POST(req(ok))).status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a non-JSON 429 retryable without logging the key", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(`Too many requests ${SECRET}`, { status: 429 }));
+    const res = await POST(req(ok));
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ code: "upstream" });
+    expect(vi.mocked(console.error).mock.calls.flat().join(" ")).not.toContain(SECRET);
   });
 
   it("maps a timeout", async () => {

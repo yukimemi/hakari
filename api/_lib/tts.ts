@@ -110,31 +110,45 @@ export function audioSeconds(wav: Buffer): number {
 // Per-instance cap on simultaneous upstream calls.
 let inFlight = 0;
 
-/** Google's error message for a failed call, for the log. Never throws and
- *  never returns the key. */
-async function upstreamReason(res: Response, key: string): Promise<string> {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+/** Only an explicit daily quota violation warrants disabling the session.
+ *  RESOURCE_EXHAUSTED and generic quota wording also cover minute limits. */
+function isDailyQuota(error: unknown): boolean {
+  if (!isRecord(error) || !Array.isArray(error.details)) return false;
+  return error.details.some((detail: unknown) =>
+    isRecord(detail) &&
+    detail["@type"] === "type.googleapis.com/google.rpc.QuotaFailure" &&
+    Array.isArray(detail.violations) &&
+    detail.violations.some((violation: unknown) =>
+      isRecord(violation) &&
+      typeof violation.quotaId === "string" &&
+      violation.quotaId.includes("PerDay"),
+    ),
+  );
+}
+
+/** Read the error once for classification and logging. Never throws and
+ *  never returns the key; classification precedes log truncation. */
+async function upstreamReason(res: Response, key: string) {
   try {
     const text = await res.text();
     let message = text;
+    let dailyQuota = false;
     try {
       const parsed: unknown = JSON.parse(text);
-      if (
-        parsed &&
-        typeof parsed === "object" &&
-        "error" in parsed &&
-        parsed.error &&
-        typeof parsed.error === "object" &&
-        "message" in parsed.error &&
-        typeof parsed.error.message === "string"
-      ) {
-        message = parsed.error.message;
+      if (isRecord(parsed) && isRecord(parsed.error)) {
+        dailyQuota = isDailyQuota(parsed.error);
+        if (typeof parsed.error.message === "string") message = parsed.error.message;
       }
     } catch {
       /* not JSON: log the raw text */
     }
-    return message.split(key).join("[key]").slice(0, 300);
+    return { message: message.split(key).join("[key]").slice(0, 300), dailyQuota };
   } catch {
-    return "(unreadable body)";
+    return { message: "(unreadable body)", dailyQuota: false };
   }
 }
 
@@ -191,10 +205,11 @@ export async function synthesize(
       // The status alone cannot tell a bad model name from an exhausted
       // quota, so the log carries Google's own wording. Logs only: nothing
       // of it reaches the client.
-      console.error("tts upstream status", res.status, await upstreamReason(res, key));
-      if (res.status === 429) {
-        // Upstream quota, not ours: the client stops asking for the session
-        // instead of burning the rest of it on refusals.
+      const reason = await upstreamReason(res, key);
+      console.error("tts upstream status", res.status, reason.message);
+      if (res.status === 429 && reason.dailyQuota) {
+        // A confirmed upstream daily quota stops requests for this session.
+        // Transient or ambiguous 429s retain the retryable upstream code.
         throw new TtsError("Gemini 音声の利用上限に達しています", "limit", 429);
       }
       throw new TtsError("音声生成に失敗しました", "upstream", 502);
