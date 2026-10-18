@@ -18,6 +18,7 @@ import {
 } from "@pixiv/three-vrm";
 import { applyBodyShape } from "./bodyShape";
 import { createMannequin } from "./mannequin";
+import { framingFor } from "./framing";
 import { motionFor, sampleMotion, IDLE, type Motion } from "./procedural";
 import { rigFromVrm, type Rig } from "./rig";
 import type { BodyShape } from "../../shared/schema";
@@ -126,8 +127,10 @@ export default function AvatarStage({
     controls.maxPolarAngle = Math.PI / 2 + 0.15;
     controls.rotateSpeed = 0.7;
 
-    // Once the view has been moved by hand, stop yanking it back on every
-    // pose change — but offer the way home.
+    // Once the view has been moved by hand, stop yanking it back to the
+    // default angle — but offer the way home. A tap on the canvas counts
+    // (OrbitControls starts on pointer-down), and so does a thumb dragging
+    // past the stage to scroll the page.
     let touched = false;
     const markTouched = () => {
       if (touched) return;
@@ -137,9 +140,17 @@ export default function AvatarStage({
     controls.addEventListener("start", markTouched);
 
     let framedFor: Motion["base"] | null = null;
-    const frameFor = (base: Motion["base"]) => {
+    // `keepSide` re-frames for a new kind of pose but stays on the side of
+    // the figure the viewer walked round to.
+    const frameFor = (base: Motion["base"], keepSide = false) => {
       framedFor = base;
-      frameCamera(camera, controls, base);
+      const { position, target } = framingFor(
+        base,
+        keepSide ? controls.getAzimuthalAngle() : undefined,
+      );
+      camera.position.set(...position);
+      controls.target.set(...target);
+      controls.update();
     };
     resetViewRef.current = () => {
       touched = false;
@@ -265,7 +276,10 @@ export default function AvatarStage({
         rig.root.rotation.x =
           base === "prone" ? Math.PI / 2 : base === "supine" ? -Math.PI / 2 : 0;
         rig.root.rotation.z = base === "side" ? Math.PI / 2 : 0;
-        if (base !== framedFor && !touched) frameFor(base);
+        // The camera follows the kind of pose, hand-moved or not: a view
+        // framed for a standing figure puts one lying on the floor at the
+        // bottom edge of the frame.
+        if (base !== framedFor) frameFor(base, touched);
         if (base === "standing") {
           rig.root.position.set(0, sample.hips[1], 0);
         } else {
@@ -339,22 +353,3 @@ export default function AvatarStage({
   );
 }
 
-/** Standing figures read best from the front; floor work needs a
- *  three-quarter view or the movement collapses into a line. */
-function frameCamera(
-  camera: THREE.PerspectiveCamera,
-  controls: OrbitControls,
-  base: Motion["base"],
-): void {
-  if (base === "standing") {
-    camera.position.set(0, 1.05, 3.1);
-    controls.target.set(0, 0.95, 0);
-  } else {
-    // Floor work is now centred on the origin (the hips sit there), so the
-    // camera looks at the origin too — the old target was compensating for
-    // a figure that used to be flung off to one side.
-    camera.position.set(1.7, 0.95, 1.7);
-    controls.target.set(0, 0.3, 0);
-  }
-  controls.update();
-}
