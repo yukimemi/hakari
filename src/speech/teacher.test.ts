@@ -382,4 +382,13 @@ describe("quota", () => {
     await t.flush();
     expect(t.spoken).toEqual(["b"]);
   });
+
+  it("tells the caller why Gemini is off", async () => {
+    const generate = vi.fn(async () => {
+      throw Object.assign(new Error("limit"), { code: "limit" });
+    });
+    const t = setup({ generate });
+    const res = await t.teacher.prefetch([{ text: "a", phase: "exercise" }]);
+    expect(res.reason).toBe("limit");
+  });
 });

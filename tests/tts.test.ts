@@ -137,6 +137,24 @@ describe("POST /api/tts", () => {
     expect(JSON.parse(text).code).toBe("upstream");
   });
 
+  it("reports an exhausted upstream quota as the limit and logs Google's reason", async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { error: { message: `Rate limit exceeded (key ${SECRET})` } },
+        { status: 429 },
+      ),
+    );
+    const res = await POST(req(ok));
+    expect(res.status).toBe(429);
+    const text = await res.text();
+    expect(JSON.parse(text).code).toBe("limit");
+    expect(text).not.toContain("Rate limit");
+    const logged = vi.mocked(console.error).mock.calls.flat().join(" ");
+    expect(logged).toContain("429");
+    expect(logged).toContain("Rate limit exceeded");
+    expect(logged).not.toContain(SECRET);
+  });
+
   it("maps a timeout", async () => {
     fetchMock.mockRejectedValueOnce(
       Object.assign(new Error(`timeout ${SECRET}`), { name: "TimeoutError" }),

@@ -111,7 +111,8 @@ export function createTeacher(deps: TeacherDeps) {
   let current: Item | null = null;
   let speaking = false;
   let geminiOn = true;
-  let unavailable = false;
+  // Why Gemini audio is off for the rest of the session, if it is.
+  let unavailable: "not_configured" | "limit" | undefined;
   const listeners = new Set<(speaking: boolean) => void>();
   const decoded = new Map<string, { duration: number }>();
   const inflight = new Map<string, Promise<void>>();
@@ -128,7 +129,7 @@ export function createTeacher(deps: TeacherDeps) {
         const profile = await deps.fetchProfile!();
         if (profile) store.setProfile(profile);
       } catch (err) {
-        if ((err as { code?: TtsErrorCode }).code === "not_configured") unavailable = true;
+        if ((err as { code?: TtsErrorCode }).code === "not_configured") unavailable = "not_configured";
       } finally {
         profileChecked = true;
       }
@@ -335,7 +336,7 @@ export function createTeacher(deps: TeacherDeps) {
     async prefetch(
       phrases: Prefetchable[],
       signal?: AbortSignal,
-    ): Promise<{ cached: number; failed: number }> {
+    ): Promise<{ cached: number; failed: number; reason?: "not_configured" | "limit" }> {
       await refreshProfile();
       const wanted = new Map<string, Prefetchable>();
       for (const p of phrases) wanted.set(`${p.phase}\n${p.text}`, p);
@@ -401,7 +402,7 @@ export function createTeacher(deps: TeacherDeps) {
           const code = (err as { code?: TtsErrorCode }).code;
           // No key, or the daily allowance is spent: asking again this
           // session would only repeat the refusal.
-          if (code === "not_configured" || code === "limit") unavailable = true;
+          if (code === "not_configured" || code === "limit") unavailable = code;
         }
         for (const p of group) {
           const key = keyFor(p);
@@ -409,7 +410,7 @@ export function createTeacher(deps: TeacherDeps) {
           else failed++;
         }
       }
-      return { cached, failed };
+      return { cached, failed, reason: unavailable };
     },
   };
 }

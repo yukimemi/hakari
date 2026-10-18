@@ -110,6 +110,34 @@ export function audioSeconds(wav: Buffer): number {
 // Per-instance cap on simultaneous upstream calls.
 let inFlight = 0;
 
+/** Google's error message for a failed call, for the log. Never throws and
+ *  never returns the key. */
+async function upstreamReason(res: Response, key: string): Promise<string> {
+  try {
+    const text = await res.text();
+    let message = text;
+    try {
+      const parsed: unknown = JSON.parse(text);
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        "error" in parsed &&
+        parsed.error &&
+        typeof parsed.error === "object" &&
+        "message" in parsed.error &&
+        typeof parsed.error.message === "string"
+      ) {
+        message = parsed.error.message;
+      }
+    } catch {
+      /* not JSON: log the raw text */
+    }
+    return message.split(key).join("[key]").slice(0, 300);
+  } catch {
+    return "(unreadable body)";
+  }
+}
+
 export async function synthesize(
   text: string,
   phase: TtsPhase,
@@ -160,7 +188,15 @@ export async function synthesize(
       );
     }
     if (!res.ok) {
-      console.error("tts upstream status", res.status);
+      // The status alone cannot tell a bad model name from an exhausted
+      // quota, so the log carries Google's own wording. Logs only: nothing
+      // of it reaches the client.
+      console.error("tts upstream status", res.status, await upstreamReason(res, key));
+      if (res.status === 429) {
+        // Upstream quota, not ours: the client stops asking for the session
+        // instead of burning the rest of it on refusals.
+        throw new TtsError("Gemini 音声の利用上限に達しています", "limit", 429);
+      }
       throw new TtsError("音声生成に失敗しました", "upstream", 502);
     }
 
