@@ -367,6 +367,17 @@ describe("voice profile", () => {
 });
 
 describe("quota", () => {
+  it("asks again on the next phrase after an upstream rate limit", async () => {
+    const generate = vi.fn(async () => ({ profile: PROFILE, audio: [], skipped: [] }));
+    generate.mockRejectedValueOnce(Object.assign(new Error("rate limit"), { code: "upstream" }));
+    const t = setup({ generate });
+    const first = await t.teacher.prefetch([{ text: "a", phase: "exercise" }]);
+    const second = await t.teacher.prefetch([{ text: "b", phase: "exercise" }]);
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(first.reason).toBeUndefined();
+    expect(second.reason).toBeUndefined();
+  });
+
   it("stops asking once the daily limit is reported", async () => {
     const generate = vi.fn(async () => {
       throw Object.assign(new Error("limit"), { code: "limit" });
@@ -381,5 +392,14 @@ describe("quota", () => {
     t.teacher.say({ text: "b", phase: "exercise" });
     await t.flush();
     expect(t.spoken).toEqual(["b"]);
+  });
+
+  it("tells the caller why Gemini is off", async () => {
+    const generate = vi.fn(async () => {
+      throw Object.assign(new Error("limit"), { code: "limit" });
+    });
+    const t = setup({ generate });
+    const res = await t.teacher.prefetch([{ text: "a", phase: "exercise" }]);
+    expect(res.reason).toBe("limit");
   });
 });

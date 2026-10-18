@@ -186,9 +186,20 @@ export function GeminiVoice({
     teacher.setGeminiEnabled(true);
     setFallbackVoice({ voiceName, pitch });
     await teacher.unlock();
-    const { failed } = await teacher.prefetch([{ text, phase: "exercise" }], controller.signal);
+    const { failed, reason } = await teacher.prefetch(
+      [{ text, phase: "exercise" }],
+      controller.signal,
+    );
     if (controller.signal.aborted) return;
-    if (failed) setNote("Gemini 音声を使えませんでした。端末の音声で再生します。");
+    if (failed || reason) {
+      setNote(
+        reason === "limit"
+          ? "Gemini 音声の利用上限に達しています。端末の音声で再生します。"
+          : reason === "not_configured"
+            ? "サーバに Gemini のキーがありません。端末の音声で再生します。"
+            : "Gemini 音声を使えませんでした。端末の音声で再生します。",
+      );
+    }
     teacher.say({ text, phase: "exercise" });
     setBusy(false);
   };
