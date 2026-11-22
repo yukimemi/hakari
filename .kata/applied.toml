@@ -1,9 +1,9 @@
 preset = "github.com/yukimemi/pj-presets:web-react-firebase"
-applied_at = "2026-11-07T03:22:46.756540007Z"
+applied_at = "2026-11-22T03:26:50.315313266Z"
 
 [[templates]]
 source = "github.com/yukimemi/pj-base"
-rev = "e6da08d35873812eae82841e5c7cf82c8d4d0185"
+rev = "fde196ac259b1acde901d0cbc91516ae2fbd7bfb"
 version = "0.18.0"
 
 [[templates]]
@@ -55,7 +55,7 @@ content_hash = "06ce8b371d82ab6ec29f0e26307e5d9b42f57662a85e4fef688013b398d5fd58
 once_applied = true
 
 [files.".github/workflows/kata-apply.yml"]
-content_hash = "fedde75b8f06ca8ffb41eb9f02e75b381c1b4c0deb8948ceda3b2b87e4861701"
+content_hash = "3f758c74694646f80b5436d5f84e6d122d243922cacb3b2ca6ec4e3586c515cf"
 
 [files.".gitignore"]
 content_hash = "99ce77ba843c5bee84182b768f18a501f6e76eef3731eb0e899997b33b7c8468"
